@@ -1,0 +1,10 @@
+scenario,concurrency,total_requests,successes,failures,throughput_rps,avg_latency_ms,p95_latency_ms
+adaptive,10,1500,1500,0,86.09,115.0,131.4
+adaptive,25,3000,3000,0,190.84,127.35,192.5
+adaptive,40,4000,4000,0,293.73,131.45,198.6
+flask_only,10,1500,1500,0,94.68,105.5,112.5
+flask_only,25,3000,3000,0,236.25,105.55,118.6
+flask_only,40,4000,4000,0,374.78,106.15,121.7
+fastapi_only,10,1500,1500,0,96.88,103.2,105.4
+fastapi_only,25,3000,3000,0,241.11,103.65,107.0
+fastapi_only,40,4000,4000,0,384.24,103.95,107.2
