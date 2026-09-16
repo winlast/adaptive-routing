@@ -1,14 +1,14 @@
-Accuracy: 0.9935
+Accuracy: 0.9970
 
 Confusion matrix:
-[[ 936    2]
- [  11 1051]]
+[[ 284    5]
+ [   1 1710]]
 
               precision    recall  f1-score   support
 
-       Flask       0.99      1.00      0.99       938
-     FastAPI       1.00      0.99      0.99      1062
+       Flask       1.00      0.98      0.99       289
+     FastAPI       1.00      1.00      1.00      1711
 
-    accuracy                           0.99      2000
-   macro avg       0.99      0.99      0.99      2000
-weighted avg       0.99      0.99      0.99      2000
+    accuracy                           1.00      2000
+   macro avg       1.00      0.99      0.99      2000
+weighted avg       1.00      1.00      1.00      2000

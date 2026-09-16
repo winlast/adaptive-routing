@@ -1,2 +1,0 @@
-total_requests,flask_count,fastapi_count,avg_probability_fastapi,avg_decision_time_heuristic_ms,avg_decision_time_neural_ms
-3735,1315,2420,0.587564317028192,0.0004136655948553055,0.16774224221008668

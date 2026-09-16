@@ -21,7 +21,7 @@ from router import AdaptiveRouter  # noqa: E402
 
 FIXED_CPU_USAGE = 50.0
 LOAD_RANGE = np.linspace(0, 200, 50)
-IO_RANGE = np.linspace(0.01, 0.3, 50)
+IO_RANGE = np.linspace(0.0, 1.0, 50)
 
 OUTPUT_FILE = DATA_DIR / "heatmap_data.csv"
 
