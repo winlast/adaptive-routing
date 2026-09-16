@@ -21,8 +21,10 @@ def router():
 
 
 @pytest.mark.parametrize("data,expected", [
+    # io_intensity >= 0.15 -> задача I/O-bound -> оптимален FastAPI (см. workload.py)
     ({"load": 120, "io_intensity": 0.25, "cpu_usage": 45.0}, "fastapi"),
-    ({"load": 30, "io_intensity": 0.20, "cpu_usage": 80.0}, "flask"),
+    ({"load": 30, "io_intensity": 0.20, "cpu_usage": 80.0}, "fastapi"),
+    # io_intensity < 0.15 -> задача CPU-bound -> оптимален Flask
     ({"load": 150, "io_intensity": 0.05, "cpu_usage": 10.0}, "flask"),
 ])
 def test_known_cases(router, data, expected):
