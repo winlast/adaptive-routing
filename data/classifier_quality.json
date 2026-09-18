@@ -128,5 +128,121 @@
       "excess_block_ms_per_1000": 14.2,
       "admitted_pct": 97.4
     }
+  },
+  "calibrated": {
+    "0.5": {
+      "endpoint_mean": {
+        "budget_ms": 1.5,
+        "admitted_block_ms_per_1000": 3872.0,
+        "worst_admitted_block_ms": 9.9
+      },
+      "linear_param": {
+        "budget_ms": 3.9,
+        "admitted_block_ms_per_1000": 3858.7,
+        "worst_admitted_block_ms": 8.3
+      },
+      "power_law": {
+        "budget_ms": 1.5,
+        "admitted_block_ms_per_1000": 3863.9,
+        "worst_admitted_block_ms": 8.3
+      },
+      "neural": {
+        "budget_ms": 1.5,
+        "admitted_block_ms_per_1000": 3865.7,
+        "worst_admitted_block_ms": 8.3
+      }
+    },
+    "0.6": {
+      "endpoint_mean": {
+        "budget_ms": 58.2,
+        "admitted_block_ms_per_1000": 7340.4,
+        "worst_admitted_block_ms": 421.1
+      },
+      "linear_param": {
+        "budget_ms": 7.8,
+        "admitted_block_ms_per_1000": 4745.0,
+        "worst_admitted_block_ms": 11.4
+      },
+      "power_law": {
+        "budget_ms": 5.8,
+        "admitted_block_ms_per_1000": 4831.4,
+        "worst_admitted_block_ms": 18.4
+      },
+      "neural": {
+        "budget_ms": 6.4,
+        "admitted_block_ms_per_1000": 4748.6,
+        "worst_admitted_block_ms": 18.4
+      }
+    },
+    "0.7": {
+      "endpoint_mean": {
+        "budget_ms": 58.2,
+        "admitted_block_ms_per_1000": 13630.0,
+        "worst_admitted_block_ms": 425.6
+      },
+      "linear_param": {
+        "budget_ms": 20.0,
+        "admitted_block_ms_per_1000": 6547.9,
+        "worst_admitted_block_ms": 26.0
+      },
+      "power_law": {
+        "budget_ms": 15.0,
+        "admitted_block_ms_per_1000": 6578.5,
+        "worst_admitted_block_ms": 26.8
+      },
+      "neural": {
+        "budget_ms": 14.9,
+        "admitted_block_ms_per_1000": 6577.7,
+        "worst_admitted_block_ms": 26.7
+      }
+    },
+    "0.8": {
+      "endpoint_mean": {
+        "budget_ms": 90.3,
+        "admitted_block_ms_per_1000": 20054.1,
+        "worst_admitted_block_ms": 622.1
+      },
+      "linear_param": {
+        "budget_ms": 50.0,
+        "admitted_block_ms_per_1000": 10358.0,
+        "worst_admitted_block_ms": 94.6
+      },
+      "power_law": {
+        "budget_ms": 63.4,
+        "admitted_block_ms_per_1000": 10248.0,
+        "worst_admitted_block_ms": 74.8
+      },
+      "neural": {
+        "budget_ms": 63.6,
+        "admitted_block_ms_per_1000": 10244.2,
+        "worst_admitted_block_ms": 74.1
+      }
+    }
+  },
+  "shifted": {
+    "endpoint_mean": {
+      "budget_ms": 58.2,
+      "admitted_pct": 59.7,
+      "admitted_block_ms_per_1000": 8653.8,
+      "worst_admitted_block_ms": 243.6
+    },
+    "linear_param": {
+      "budget_ms": 20.0,
+      "admitted_pct": 60.2,
+      "admitted_block_ms_per_1000": 5143.0,
+      "worst_admitted_block_ms": 26.0
+    },
+    "power_law": {
+      "budget_ms": 15.0,
+      "admitted_pct": 59.8,
+      "admitted_block_ms_per_1000": 5077.4,
+      "worst_admitted_block_ms": 26.8
+    },
+    "neural": {
+      "budget_ms": 14.9,
+      "admitted_pct": 59.8,
+      "admitted_block_ms_per_1000": 5093.2,
+      "worst_admitted_block_ms": 26.7
+    }
   }
 }

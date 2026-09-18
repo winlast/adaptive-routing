@@ -49,19 +49,41 @@ SOURCES = {
     "neural": "нейронная сеть",
 }
 BUDGETS = [15, 30, 60, 120, 250]
+
+# Доли трафика, которые требуется пропустить в асинхронный движок. Для
+# каждой оценки подбирается свой порог, дающий именно эту долю. Без
+# такого выравнивания сравнение оценок при одном пороге сравнивает не
+# точность классификаторов, а разные рабочие режимы: строгая оценка
+# пропускает меньше работы, отчего у неё лучше хвост и хуже пропускная
+# способность — и это ничего не говорит о том, правильные ли запросы
+# она выбрала.
+TARGET_SHARES = [0.5, 0.6, 0.7, 0.8]
 N_REQUESTS = 40_000
 SEED = 20260918
 
 
-def build_stream(n: int) -> list[tuple[str, int | None]]:
-    rng = random.Random(SEED)
-    endpoints = list(TRAFFIC_MIX)
-    weights = [TRAFFIC_MIX[e] for e in endpoints]
-    stream = []
-    for _ in range(n):
-        endpoint = rng.choices(endpoints, weights=weights, k=1)[0]
-        stream.append((endpoint, sample_param(ENDPOINTS[endpoint], rng)))
-    return stream
+def build_stream(n: int, skew: float | None = None,
+                 seed: int = SEED) -> list[tuple[str, int | None]]:
+    """
+    Разыгрывает поток запросов. `skew` задаёт смещение распределения
+    параметра: чем он меньше, тем чаще встречаются крупные значения.
+    """
+    import core.workload as workload
+
+    original = workload.PARAM_SKEW
+    if skew is not None:
+        workload.PARAM_SKEW = skew
+    try:
+        rng = random.Random(seed)
+        endpoints = list(TRAFFIC_MIX)
+        weights = [TRAFFIC_MIX[e] for e in endpoints]
+        stream = []
+        for _ in range(n):
+            endpoint = rng.choices(endpoints, weights=weights, k=1)[0]
+            stream.append((endpoint, sample_param(ENDPOINTS[endpoint], rng)))
+        return stream
+    finally:
+        workload.PARAM_SKEW = original
 
 
 def main() -> None:
@@ -110,9 +132,96 @@ def main() -> None:
                   f"{per_1000:>20.0f} мс")
         print()
 
+    calibrated = calibrate(stream, true_block, predicted)
+    results["calibrated"] = calibrated
+    results["shifted"] = shift_test(truth, estimators, calibrated)
     OUTPUT.write_text(json.dumps(results, indent=2, ensure_ascii=False),
                       encoding="utf-8")
     print(f"Сохранено: {OUTPUT}")
+
+
+def calibrate(stream, true_block, predicted) -> dict:
+    """
+    Подбирает каждой оценке порог, дающий заданную долю трафика в
+    асинхронном движке, и сравнивает оценки при равной доле.
+
+    При равной доле пропущенной работы пропускная способность
+    выравнивается, и остаётся единственное различие — правильно ли
+    выбраны именно те запросы, которые безопасны для event loop.
+    """
+    n = len(stream)
+    out: dict = {}
+    print("\nПри РАВНОЙ доле трафика в асинхронном движке:")
+    print(f"{'доля':>6}  {'классификатор':<22}{'порог, мс':>11}"
+          f"{'блокировки в event loop':>26}{'самая тяжёлая':>16}")
+    print("-" * 84)
+    for share in TARGET_SHARES:
+        target = int(n * share)
+        for name, title in SOURCES.items():
+            order = sorted(range(n), key=lambda i: predicted[name][i])
+            admitted = order[:target]
+            budget = predicted[name][order[target - 1]]
+            total_block = sum(true_block[i] for i in admitted)
+            worst = max(true_block[i] for i in admitted)
+            out.setdefault(f"{share:.1f}", {})[name] = {
+                "budget_ms": round(budget, 1),
+                "admitted_block_ms_per_1000": round(total_block / n * 1000, 1),
+                "worst_admitted_block_ms": round(worst, 1),
+            }
+            print(f"{share:>6.0%}  {title:<22}{budget:>11.0f}"
+                  f"{total_block / n * 1000:>22.0f} мс{worst:>13.0f} мс")
+        print()
+    return out
+
+
+def shift_test(truth, estimators, calibrated, share: str = "0.7") -> dict:
+    """
+    Что происходит с порогом, подобранным под один трафик, когда трафик
+    изменился.
+
+    Порог, найденный опытным путём, описывает не запросы, а конкретное
+    распределение запросов. Пока оно держится, грубая оценка с
+    подкрученным порогом работает не хуже точной. Как только клиенты
+    начинают запрашивать более крупные выборки — включился ночной
+    пересчёт, подключился новый потребитель, изменилась выдача, — порог
+    перестаёт означать то, ради чего его ставили.
+
+    Здесь пороги берутся подобранными на исходном трафике, а
+    оцениваются на трафике, смещённом к крупным значениям параметра.
+    Оценка, которая верно предсказывает саму величину блокировки, от
+    смещения не страдает: её порог по-прежнему означает «не более
+    стольких миллисекунд». Оценка с неверной формой зависимости
+    страдает тем сильнее, чем дальше ушло распределение.
+    """
+    shifted = build_stream(N_REQUESTS, skew=0.7, seed=SEED + 1)
+    true_block = [truth.blocking(e, p, "async") for e, p in shifted]
+    n = len(shifted)
+
+    print("\nПороги подобраны на исходном трафике, трафик сместился "
+          "к крупным запросам:")
+    print(f"{'классификатор':<22}{'порог, мс':>11}{'доля в async':>14}"
+          f"{'блокировки в event loop':>26}{'самая тяжёлая':>16}")
+    print("-" * 89)
+
+    out: dict = {}
+    for name, title in SOURCES.items():
+        budget = calibrated[share][name]["budget_ms"]
+        predicted = [estimators[name].blocking(e, p, "async")
+                     for e, p in shifted]
+        admitted = [i for i in range(n) if predicted[i] <= budget]
+        if not admitted:
+            continue
+        total = sum(true_block[i] for i in admitted)
+        worst = max(true_block[i] for i in admitted)
+        out[name] = {
+            "budget_ms": budget,
+            "admitted_pct": round(len(admitted) / n * 100, 1),
+            "admitted_block_ms_per_1000": round(total / n * 1000, 1),
+            "worst_admitted_block_ms": round(worst, 1),
+        }
+        print(f"{title:<22}{budget:>11.0f}{len(admitted) / n * 100:>13.1f}%"
+              f"{total / n * 1000:>22.0f} мс{worst:>13.0f} мс")
+    return out
 
 
 if __name__ == "__main__":
