@@ -278,3 +278,111 @@ def build_static_rule_from_costs(cost_table: dict[str, dict[str, float]]
         for endpoint, costs in cost_table.items()
     }
     return StaticRulePolicy(mapping)
+
+
+class AdaptiveWorkPolicy(Policy):
+    """
+    То же, что least-expected-work, но оценки стоимости обновляются по
+    ходу работы наблюдаемыми значениями.
+
+    Фиксированная таблица стоимостей верна ровно до тех пор, пока система
+    не изменилась. Как только внешняя зависимость начинает отвечать
+    медленнее, таблица устаревает, и политика продолжает считать дешёвым
+    то, что уже стало дорогим. Здесь оценка каждой пары «эндпоинт-воркер»
+    поддерживается экспоненциальным скользящим средним по фактическим
+    измерениям, поэтому политика подстраивается без переобучения и без
+    участия человека.
+
+    Машинного обучения здесь по-прежнему нет — это просто скользящее
+    среднее. Если оно окажется достаточным, значит и в нестационарном
+    режиме модель не нужна, и это следует признать.
+    """
+
+    name = "adaptive_work"
+
+    def __init__(self, cost_table: dict[str, dict[str, float]],
+                 alpha: float = 0.2, default_cost_ms: float = 150.0):
+        self.estimates = {
+            endpoint: dict(costs) for endpoint, costs in cost_table.items()
+        }
+        self.alpha = alpha
+        self.default_cost = default_cost_ms
+
+    def _cost(self, endpoint: str, worker: str) -> float:
+        row = self.estimates.get(endpoint)
+        if not row:
+            return self.default_cost
+        value = row.get(worker)
+        return float(value) if value is not None else self.default_cost
+
+    def choose(self, features: RequestFeatures) -> str:
+        return min(
+            WORKERS,
+            key=lambda w: features.pending_work.get(w, 0.0)
+            + self._cost(features.endpoint, w),
+        )
+
+    def observe(self, features: RequestFeatures, worker: str,
+                latency_ms: float) -> None:
+        """
+        Обновляет оценку по факту выполнения.
+
+        Из измеренной длительности вычитается время, которое запрос
+        предположительно простоял в очереди: интересна собственная
+        стоимость обработки, а не задержка из-за чужих запросов.
+        """
+        queue_delay = features.pending_work.get(worker, 0.0)
+        own_cost = max(latency_ms - queue_delay, 1.0)
+        row = self.estimates.setdefault(features.endpoint, {})
+        previous = row.get(worker, own_cost)
+        row[worker] = (1 - self.alpha) * previous + self.alpha * own_cost
+
+
+class OnlineModelPolicy(Policy):
+    """
+    Обучаемая модель с онлайн-коррекцией под текущие условия.
+
+    Модель обучена заранее и в изменившейся обстановке начинает системно
+    ошибаться. Вместо переобучения на лету, которое дорого и нестабильно,
+    здесь поддерживается поправочный коэффициент на каждую пару
+    «эндпоинт-воркер»: отношение фактической длительности к предсказанной,
+    сглаженное скользящим средним. Предсказание модели умножается на этот
+    коэффициент.
+
+    Так сохраняется то, что модель знает о структуре задачи, но
+    добавляется способность заметить, что конкретный путь стал дороже,
+    чем был на момент обучения.
+    """
+
+    name = "online_model"
+
+    def __init__(self, predictor, alpha: float = 0.25, slack: int = 2):
+        self.predictor = predictor
+        self.alpha = alpha
+        self.slack = slack
+        self.correction: dict[tuple[str, str], float] = {}
+
+    def choose(self, features: RequestFeatures) -> str:
+        inflight = features.inflight
+        min_load = min(inflight.get(w, 0) for w in WORKERS)
+        candidates = [w for w in WORKERS
+                      if inflight.get(w, 0) <= min_load + self.slack]
+        if len(candidates) == 1:
+            return candidates[0]
+
+        predictions = self.predictor.predict_all_workers(features)
+        return min(
+            candidates,
+            key=lambda w: predictions[w]
+            * self.correction.get((features.endpoint, w), 1.0),
+        )
+
+    def observe(self, features: RequestFeatures, worker: str,
+                latency_ms: float) -> None:
+        predicted = self.predictor.predict_all_workers(features).get(worker)
+        if not predicted or predicted <= 0:
+            return
+        ratio = max(min(latency_ms / predicted, 10.0), 0.1)
+        key = (features.endpoint, worker)
+        previous = self.correction.get(key, 1.0)
+        self.correction[key] = (1 - self.alpha) * previous + self.alpha * ratio

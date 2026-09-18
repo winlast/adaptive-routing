@@ -18,11 +18,24 @@ app = FastAPI()
 
 PAYLOAD = "response-body-" + "d" * 512
 
+# Множитель задержки. Позволяет на ходу имитировать деградацию внешней
+# зависимости: замедление базы, тормозящий сторонний API, сетевые
+# проблемы. В реальных системах это происходит постоянно, и именно такие
+# изменения делают однажды измеренную таблицу стоимостей устаревшей.
+state = {"slowdown": 1.0}
+
 
 @app.get("/wait")
 async def wait(ms: int = 0):
-    await asyncio.sleep(ms / 1000)
+    await asyncio.sleep(ms * state["slowdown"] / 1000)
     return JSONResponse({"waited_ms": ms, "payload": PAYLOAD})
+
+
+@app.post("/slowdown")
+async def set_slowdown(factor: float = 1.0):
+    """Меняет скорость ответа внешнего сервиса во время эксперимента."""
+    state["slowdown"] = factor
+    return {"slowdown": factor}
 
 
 @app.get("/health")

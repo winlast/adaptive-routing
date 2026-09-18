@@ -36,7 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core.policies import (
     WORKERS,
     HybridPolicy,
+    AdaptiveWorkPolicy,
     LeastExpectedWorkPolicy,
+    OnlineModelPolicy,
     LeastConnectionsPolicy,
     ModelPolicy,
     OraclePolicy,
@@ -110,6 +112,12 @@ def build_policy(name: str) -> Policy:
         return LeastConnectionsPolicy()
     if name == "least_work":
         return LeastExpectedWorkPolicy(load_cost_table())
+    if name == "adaptive_work":
+        return AdaptiveWorkPolicy(load_cost_table())
+    if name == "online_model":
+        from core.predictor import LatencyPredictor
+
+        return OnlineModelPolicy(LatencyPredictor.load())
     if name == "static_rule":
         return build_static_rule_from_costs(load_cost_table())
     if name == "oracle":
