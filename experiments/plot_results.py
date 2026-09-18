@@ -204,6 +204,9 @@ def plot_mechanism() -> None:
 
 def main() -> None:
     FIGURES_DIR.mkdir(exist_ok=True)
+    from experiments.plot_architecture import main as plot_architecture
+
+    plot_architecture()
     plot_blocking()
     if (DATA_DIR / "mechanism.json").exists():
         plot_mechanism()
