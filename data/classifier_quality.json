@@ -1,0 +1,132 @@
+{
+  "15": {
+    "endpoint_mean": {
+      "false_admit_pct": 0.0,
+      "false_reject_pct": 8.18,
+      "excess_block_ms_per_1000": 0.0,
+      "admitted_pct": 54.6
+    },
+    "linear_param": {
+      "false_admit_pct": 1.53,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 45.6,
+      "admitted_pct": 64.3
+    },
+    "power_law": {
+      "false_admit_pct": 7.2,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 393.8,
+      "admitted_pct": 70.0
+    },
+    "neural": {
+      "false_admit_pct": 7.3,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 396.8,
+      "admitted_pct": 70.1
+    }
+  },
+  "30": {
+    "endpoint_mean": {
+      "false_admit_pct": 0.0,
+      "false_reject_pct": 19.59,
+      "excess_block_ms_per_1000": 0.0,
+      "admitted_pct": 54.6
+    },
+    "linear_param": {
+      "false_admit_pct": 0.82,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 27.4,
+      "admitted_pct": 75.0
+    },
+    "power_law": {
+      "false_admit_pct": 1.1,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 32.8,
+      "admitted_pct": 75.3
+    },
+    "neural": {
+      "false_admit_pct": 1.12,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 35.1,
+      "admitted_pct": 75.3
+    }
+  },
+  "60": {
+    "endpoint_mean": {
+      "false_admit_pct": 6.73,
+      "false_reject_pct": 6.3,
+      "excess_block_ms_per_1000": 7519.6,
+      "admitted_pct": 79.6
+    },
+    "linear_param": {
+      "false_admit_pct": 2.45,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 522.0,
+      "admitted_pct": 81.6
+    },
+    "power_law": {
+      "false_admit_pct": 0.54,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 21.1,
+      "admitted_pct": 79.7
+    },
+    "neural": {
+      "false_admit_pct": 0.62,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 21.4,
+      "admitted_pct": 79.8
+    }
+  },
+  "120": {
+    "endpoint_mean": {
+      "false_admit_pct": 16.86,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 9480.3,
+      "admitted_pct": 100.0
+    },
+    "linear_param": {
+      "false_admit_pct": 13.85,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 3673.7,
+      "admitted_pct": 97.0
+    },
+    "power_law": {
+      "false_admit_pct": 10.71,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 512.6,
+      "admitted_pct": 93.8
+    },
+    "neural": {
+      "false_admit_pct": 10.65,
+      "false_reject_pct": 0.1,
+      "excess_block_ms_per_1000": 505.1,
+      "admitted_pct": 93.7
+    }
+  },
+  "250": {
+    "endpoint_mean": {
+      "false_admit_pct": 2.76,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 3246.2,
+      "admitted_pct": 100.0
+    },
+    "linear_param": {
+      "false_admit_pct": 2.35,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 2680.4,
+      "admitted_pct": 99.6
+    },
+    "power_law": {
+      "false_admit_pct": 0.43,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 58.8,
+      "admitted_pct": 97.7
+    },
+    "neural": {
+      "false_admit_pct": 0.18,
+      "false_reject_pct": 0.0,
+      "excess_block_ms_per_1000": 14.2,
+      "admitted_pct": 97.4
+    }
+  }
+}

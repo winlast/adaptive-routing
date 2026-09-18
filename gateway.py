@@ -35,6 +35,7 @@ from core.cost_model import ConstantCost, build_estimator
 from core.policies import (
     WORKERS,
     AdaptiveOccupancyPolicy,
+    AdaptiveBudgetPolicy,
     BlockingBudgetPolicy,
     ExploringPolicy,
     FixedWorkerPolicy,
@@ -127,12 +128,13 @@ def build_policy(name: str) -> tuple[Policy, object]:
     # budget_<оценка>_<порог в мс>: классификатор допускает запрос в
     # асинхронный движок, только если предсказанная блокировка не
     # превышает порога.
-    if name.startswith("budget_"):
-        _, source, budget = name.split("_", 2)
+    if name.startswith("budget_") or name.startswith("adabudget_"):
+        prefix, source, budget = name.split("_", 2)
         estimator = build_estimator(COST_POLICIES[f"work_{source}"])
         budget_ms = float("inf") if budget == "inf" else float(budget)
-        return (BlockingBudgetPolicy(estimator, budget_ms, name=name),
-                estimator)
+        factory = (AdaptiveBudgetPolicy if prefix == "adabudget"
+                   else BlockingBudgetPolicy)
+        return factory(estimator, budget_ms, name=name), estimator
     if name in COST_POLICIES:
         estimator = build_estimator(COST_POLICIES[name])
         return LeastOccupancyPolicy(estimator, name=name), estimator

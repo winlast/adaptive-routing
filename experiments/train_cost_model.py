@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import statistics
 import sys
@@ -113,6 +114,8 @@ def main() -> None:
             line += f"{median_ape(est, rows):>14.1f}%"
         print(line)
 
+    save_accuracy(estimators, holdout)
+
     print("\nПодобранные показатели степени зависимости цены от параметра")
     print("(степенной закон против истинных):")
     power = estimators["степенной закон"]
@@ -125,6 +128,28 @@ def main() -> None:
         for w in WORKERS:
             line += f"{row.get(w, [0, 0])[1]:>10.2f}"
         print(line)
+
+
+def save_accuracy(estimators, holdout) -> None:
+    """Сохраняет точности для построения графика."""
+    payload = {
+        "overall": {name: round(median_ape(est, holdout), 1)
+                    for name, est in estimators.items()},
+        "overall_blocking": {name: round(median_ape(est, holdout, "blocking"), 1)
+                             for name, est in estimators.items()},
+        "by_endpoint": {},
+    }
+    for endpoint in ENDPOINTS:
+        rows = [r for r in holdout if r["endpoint"] == endpoint]
+        if rows:
+            payload["by_endpoint"][endpoint] = {
+                name: round(median_ape(est, rows), 1)
+                for name, est in estimators.items()
+            }
+    path = Path(__file__).resolve().parent.parent / "data" / "estimator_accuracy.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                    encoding="utf-8")
+    print(f"\nТочности сохранены: {path}")
 
 
 if __name__ == "__main__":

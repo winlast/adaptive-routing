@@ -223,6 +223,60 @@ class BlockingBudgetPolicy(Policy):
         )
 
 
+class AdaptiveBudgetPolicy(BlockingBudgetPolicy):
+    """
+    Та же политика, но с поправкой оценок по ходу работы.
+
+    Таблица, снятая профилированием, верна ровно до тех пор, пока
+    система не изменилась. На той же машине появился сосед, у движка
+    отобрали процессорное время — код не менялся, а ёмкость упала, и
+    политика продолжает считать дешёвым то, что подорожало.
+
+    Здесь на каждую пару «маршрут — движок» поддерживается
+    мультипликативная поправка: отношение наблюдённой длительности к
+    ожидаемой, сглаженное скользящим средним. Поправка применяется и при
+    взвешивании очереди, и при допуске в асинхронный движок. Машинного
+    обучения в самой поправке нет — это скользящее среднее, и если его
+    достаточно, так и следует написать.
+    """
+
+    def __init__(self, estimator, budget_ms: float, alpha: float = 0.25,
+                 name: str = "adaptive_budget", **kwargs):
+        super().__init__(estimator, budget_ms, name=name, **kwargs)
+        self.alpha = alpha
+        self.correction: dict[tuple[str, str], float] = {}
+
+    def _blocking(self, features: RequestFeatures, worker: str) -> float:
+        base = self.estimator.blocking(features.endpoint, features.param,
+                                       worker)
+        return base * self.correction.get((features.endpoint, worker), 1.0)
+
+    def choose(self, features: RequestFeatures) -> str:
+        candidates = [
+            w for w in WORKERS
+            if w != self.guarded_worker
+            or self._blocking(features, w) <= self.budget_ms
+        ]
+        if not candidates:
+            return self.safe_worker if self.safe_worker in WORKERS else WORKERS[0]
+        return min(candidates,
+                   key=lambda w: features.pending_work.get(w, 0.0)
+                   + self._blocking(features, w))
+
+    def observe(self, features: RequestFeatures, worker: str,
+                latency_ms: float) -> None:
+        expected = self.estimator.cost(features.endpoint, features.param,
+                                       worker)
+        if expected <= 0:
+            return
+        queue_delay = features.pending_work.get(worker, 0.0)
+        own = max(latency_ms - queue_delay, 1.0)
+        ratio = max(min(own / expected, 10.0), 0.1)
+        key = (features.endpoint, worker)
+        previous = self.correction.get(key, 1.0)
+        self.correction[key] = (1 - self.alpha) * previous + self.alpha * ratio
+
+
 class StaticRulePolicy(Policy):
     """
     Экспертное правило: фиксированное отображение маршрута на движок,
