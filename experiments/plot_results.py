@@ -10,7 +10,10 @@
   2. Точность оценки стоимости. Показывает, что стоимость запроса не
      определяется его маршрутом и насколько её удаётся восстановить по
      наблюдаемым признакам.
-  3. Достижимая граница. Показывает, во что точность оценки превращается
+  3. Где именно нужно обучение. Оценка нагрузки применяется в двух
+     ролях — при допуске в event loop и при взвешивании очереди, — и
+     рисунок показывает, что результат определяет только вторая.
+  4. Достижимая граница. Показывает, во что точность оценки превращается
      на работающей системе: каждая точка — рабочий режим, кривая —
      компромисс между пропускной способностью и хвостом задержек.
 """
@@ -37,7 +40,7 @@ SOURCES = {
     "linear": ("линейная поправка", "#F57C00", "s"),
     "power": ("степенной закон", "#1976D2", "^"),
     "neural": ("нейронная сеть", "#2E7D32", "D"),
-    "measured": ("точная таблица (граница)", "#6A1B9A", "*"),
+    "measured": ("прямое профилирование", "#6A1B9A", "*"),
 }
 
 
@@ -140,13 +143,61 @@ def plot_frontier() -> None:
                            label={"all_sync": "весь трафик в синхронный",
                                   "all_async": "весь трафик в асинхронный",
                                   "least_conn": "least-connections"}[name])
+        # Парето-граница: режимы, которых никто не превосходит сразу по
+        # обеим осям. Именно она и подлежит сравнению, а не отдельные
+        # точки — иначе вывод зависел бы от произвольно выбранного порога.
+        pts = [(v["rps"], v[metric]) for v in data.values()]
+        front = sorted(p for p in pts
+                       if not any(q[0] >= p[0] and q[1] <= p[1] and q != p
+                                  for q in pts))
+        ax.plot([p[0] for p in front], [p[1] for p in front],
+                color="#9E9E9E", linewidth=6, alpha=0.35, zorder=0,
+                label="Парето-граница")
         ax.set_xlabel("пропускная способность, запросов/с  (больше лучше)")
         ax.set_ylabel(ylabel + "  (меньше лучше)")
         ax.set_title(title)
         ax.grid(alpha=0.3)
-    axes[0].legend(fontsize=8, loc="upper left")
+        lo = min(p[1] for p in pts)
+        hi = max(p[1] for p in pts)
+        ax.set_ylim(lo - (hi - lo) * 0.06, hi + (hi - lo) * 0.30)
+    axes[0].legend(fontsize=8, loc="upper left", ncol=2, framealpha=0.9)
     fig.tight_layout()
     out = FIGURES_DIR / "budget_frontier.png"
+    fig.savefig(out, dpi=150)
+    print(f"Сохранено: {out}")
+
+
+def plot_mechanism() -> None:
+    data = json.loads((DATA_DIR / "mechanism.json").read_text(encoding="utf-8"))
+    order = ["budget_linear_20", "split_neural_linear_15",
+             "split_linear_neural_20", "budget_neural_15"]
+    labels = ["допуск: правило\nвес: правило", "допуск: модель\nвес: правило",
+              "допуск: правило\nвес: модель", "допуск: модель\nвес: модель"]
+    colors = ["#C62828", "#C62828", "#2E7D32", "#2E7D32"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    for ax, key, title, ylabel in (
+        (axes[0], "light_p95",
+         "Хвостовая задержка лёгких запросов", "95-й процентиль, мс"),
+        (axes[1], "light_over_budget_pct",
+         "Доля лёгких запросов дольше 200 мс", "% запросов"),
+    ):
+        values = [data[k][key] for k in order]
+        bars = ax.bar(range(4), values, color=colors, width=0.62)
+        ax.set_xticks(range(4))
+        ax.set_xticklabels(labels, fontsize=9)
+        ax.set_ylabel(ylabel + "  (меньше лучше)")
+        ax.set_title(title)
+        ax.grid(axis="y", alpha=0.3)
+        for bar, v in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width() / 2, v,
+                    f"{v:.1f}" if key.endswith("pct") else f"{v:.0f}",
+                    ha="center", va="bottom", fontsize=10)
+    fig.suptitle("Обучение нужно при взвешивании очереди, а не при допуске:\n"
+                 "результат разделяется по правой половине каждой пары",
+                 fontsize=12)
+    fig.tight_layout()
+    out = FIGURES_DIR / "where_learning_matters.png"
     fig.savefig(out, dpi=150)
     print(f"Сохранено: {out}")
 
@@ -154,6 +205,8 @@ def plot_frontier() -> None:
 def main() -> None:
     FIGURES_DIR.mkdir(exist_ok=True)
     plot_blocking()
+    if (DATA_DIR / "mechanism.json").exists():
+        plot_mechanism()
     if (DATA_DIR / "estimator_accuracy.json").exists():
         plot_accuracy()
     if (DATA_DIR / "budget_frontier.json").exists():

@@ -46,6 +46,11 @@ def train_neural(samples: list[dict]) -> NeuralCost:
     import torch
     from sklearn.preprocessing import StandardScaler
 
+    # Начальные веса фиксированы. Иначе повторный запуск обучения даёт
+    # другую модель, и опубликованные числа замеров перестают
+    # соответствовать тому, что лежит в data/.
+    torch.manual_seed(20260918)
+
     x = np.array([encode(r["endpoint"], r.get("param"), r["worker"], WORKERS)
                   for r in samples], dtype=np.float32)
     y = np.log(np.maximum(np.array(
@@ -81,6 +86,11 @@ def median_ape(estimator, rows: list[dict], target: str = "cost") -> float:
 
 
 def main() -> None:
+    # Режим `--saved` только оценивает уже обученные модели и ничего не
+    # переобучает. Нужен потому, что переобучение порождает другую
+    # модель, а замеры сделаны с той, что лежит в data/.
+    use_saved = "--saved" in sys.argv
+
     train = load_samples()
     holdout = load_samples(HOLDOUT_PATH_DEFAULT)
     print(f"Обучающих замеров {len(train)}, отложенных {len(holdout)}\n")
@@ -88,11 +98,14 @@ def main() -> None:
     estimators = {
         "среднее по маршруту": EndpointMeanCost(train),
         "линейная поправка": LinearParamCost(train),
-        "степенной закон": PowerLawCost.fit(train),
-        "нейронная сеть": train_neural(train),
+        "степенной закон": (PowerLawCost.load() if use_saved
+                            else PowerLawCost.fit(train)),
+        "нейронная сеть": (NeuralCost.load() if use_saved
+                           else train_neural(train)),
     }
-    estimators["степенной закон"].save()
-    estimators["нейронная сеть"].save()
+    if not use_saved:
+        estimators["степенной закон"].save()
+        estimators["нейронная сеть"].save()
 
     print("\nМедианная относительная ошибка на отложенной выборке:")
     print(f"{'оценка':<24}{'цена запроса':>16}{'блокировка':>14}")
