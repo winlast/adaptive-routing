@@ -24,3 +24,6 @@ docs/Заявки и заключения/
 
 # Сгенерированная БД для нагрузочных операций
 data/workload.db
+
+# NTFS-метки Windows
+*:Zone.Identifier
