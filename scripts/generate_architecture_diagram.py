@@ -22,14 +22,14 @@ def arrow(x1, y1, x2, y2, label=""):
     if label:
         ax.text((x1+x2)/2, (y1+y2)/2 + 0.25, label, ha="center", fontsize=9)
 
-box(0.3, 2, 1.8, 1, "Клиент\n(hey)", "#55A868")
+box(0.3, 2, 1.8, 1, "Клиент", "#55A868")
 box(3.5, 2, 2.5, 1, "Gateway\nAdaptiveRouter", "#DD8452")
-box(7.5, 3.3, 2, 1, "Flask\n:5000", "#4C72B0")
-box(7.5, 0.7, 2, 1, "FastAPI\n:8000", "#4C72B0")
+box(7.5, 3.3, 2, 1, "Flask\n:5000\n(CPU-bound)", "#4C72B0")
+box(7.5, 0.7, 2, 1, "FastAPI\n:8000\n(I/O-bound)", "#4C72B0")
 
 arrow(2.1, 2.5, 3.5, 2.5, "POST /route")
-arrow(6.0, 2.9, 7.5, 3.7, "load>50?\n→ Flask")
-arrow(6.0, 2.1, 7.5, 1.2, "→ FastAPI")
+arrow(6.0, 2.9, 7.5, 3.7, "io_intensity < 0.15\n→ Flask")
+arrow(6.0, 2.1, 7.5, 1.2, "io_intensity ≥ 0.15\n→ FastAPI")
 
 ax.text(4.75, 1.6, "load, io_intensity,\ncpu_usage → PyTorch → P(FastAPI)",
         ha="center", fontsize=8, style="italic")
