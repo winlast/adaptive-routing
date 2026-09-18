@@ -12,6 +12,8 @@
 без выноса в executor.
 """
 import sys
+import threading
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -26,6 +28,22 @@ app = FastAPI()
 WORKER_NAME = "async"
 
 client: httpx.AsyncClient | None = None
+
+# Фоновая нагрузка, отбирающая у процесса процессорное время. Нужна,
+# чтобы воспроизвести обычную для реальных развёртываний ситуацию: рядом
+# появился сосед, и движок стал медленнее, хотя код его не менялся.
+# Для асинхронного движка это означает, что каждое вычисление держит
+# event loop дольше, чем показало профилирование, — то есть снятая
+# заранее оценка блокировки становится заниженной.
+noise = {"threads": 0, "stop": None}
+
+
+def _burn(stop_event: threading.Event) -> None:
+    value = 0
+    while not stop_event.is_set():
+        for i in range(20_000):
+            value = (value * 31 + i) % 1_000_003
+        time.sleep(0)
 
 
 @app.on_event("startup")
@@ -52,9 +70,26 @@ async def process(request: Request):
     return JSONResponse(result)
 
 
+@app.post("/noise")
+async def set_noise(threads: int = 0):
+    """Включает или выключает фоновую нагрузку на этот движок."""
+    if noise["stop"] is not None:
+        noise["stop"].set()
+        noise["stop"] = None
+    noise["threads"] = threads
+    if threads > 0:
+        stop_event = threading.Event()
+        noise["stop"] = stop_event
+        for _ in range(threads):
+            threading.Thread(target=_burn, args=(stop_event,),
+                             daemon=True).start()
+    return {"noise_threads": threads}
+
+
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "worker": WORKER_NAME}
+    return {"status": "healthy", "worker": WORKER_NAME,
+            "noise_threads": noise["threads"]}
 
 
 if __name__ == "__main__":

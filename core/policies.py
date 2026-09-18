@@ -287,6 +287,96 @@ class AdaptiveBudgetPolicy(BlockingBudgetPolicy):
         self.correction[key] = (1 - self.alpha) * previous + self.alpha * ratio
 
 
+class HealthAdaptiveBudgetPolicy(BlockingBudgetPolicy):
+    """
+    Та же политика, но с оценкой текущего состояния движка по замерам.
+
+    Таблица, снятая профилированием, описывает движок таким, каким он
+    был в момент замера. Если рядом появился сосед и движку достаётся
+    меньше процессорного времени, таблица занижает и стоимость, и
+    блокировку, а политика продолжает считать дешёвым то, что
+    подорожало.
+
+    Ключевой вопрос — по какому наблюдению судить, что движок испортился.
+    Разность «замеренная задержка минус оценка очереди» для этого не
+    годится: под нагрузкой она вбирает в себя ожидание, не связанное с
+    деградацией, и растёт одинаково у всех движков. Проверка показала
+    именно это — поправка раздувалась и у движка, который не менялся,
+    и потому не различала, какой из них испортился.
+
+    Здесь берётся отношение замеренной задержки к ожидаемому
+    собственному времени обработки, и по скользящему окну из этих
+    отношений берётся нижний дециль. Нижний дециль отбирает запросы,
+    которые почти не стояли в очереди: очередь способна только
+    увеличить задержку, поэтому самые быстрые наблюдения ближе всего к
+    собственному времени обработки. У исправного движка это отношение
+    около единицы, у потерявшего часть процессорного времени — во
+    столько раз больше, во сколько он замедлился.
+    """
+
+    WINDOW = 60
+
+    def __init__(self, estimator, budget_ms: float,
+                 name: str = "health_budget", rank_full: bool = False,
+                 **kwargs):
+        # `rank_full` определяет, чем движки сравниваются между собой.
+        # По блокировке сравнивать недостаточно, когда движок потерял
+        # процессорное время: его блокировка почти не меняется (тяжёлое
+        # вычисление замедляется слабо), а вот короткие запросы на нём
+        # начинают ждать. Полное время обработки, помноженное на
+        # состояние движка, делает испорченный движок непривлекательным
+        # для любой работы, а не только для вычислительной.
+        super().__init__(estimator, budget_ms, name=name, **kwargs)
+        from collections import deque
+
+        self.rank_full = rank_full
+        self.samples = {w: deque(maxlen=self.WINDOW) for w in WORKERS}
+
+    def _health(self, worker: str) -> float:
+        values = sorted(self.samples[worker])
+        if len(values) < 8:
+            return 1.0
+        return max(min(values[len(values) // 10], 20.0), 0.5)
+
+    def _blocking(self, features: RequestFeatures, worker: str) -> float:
+        return (self.estimator.blocking(features.endpoint, features.param,
+                                        worker)
+                * self._health(worker))
+
+    def _rank_term(self, features: RequestFeatures, worker: str) -> float:
+        if not self.rank_full:
+            return self._blocking(features, worker)
+        return (self.estimator.cost(features.endpoint, features.param, worker)
+                * self._health(worker))
+
+    def choose(self, features: RequestFeatures) -> str:
+        candidates = [
+            w for w in WORKERS
+            if w != self.guarded_worker
+            or self._blocking(features, w) <= self.budget_ms
+        ]
+        if not candidates:
+            return self.safe_worker if self.safe_worker in WORKERS else WORKERS[0]
+        return min(candidates,
+                   key=lambda w: features.pending_work.get(w, 0.0)
+                   + self._rank_term(features, w))
+
+    def observe(self, features: RequestFeatures, worker: str,
+                latency_ms: float) -> None:
+        # Ожидаемое собственное время обработки: полная цена запроса за
+        # вычетом блокировки, которую он причиняет остальным.
+        cost = self.estimator.cost(features.endpoint, features.param, worker)
+        block = self.estimator.blocking(features.endpoint, features.param,
+                                        worker)
+        own = max(cost - block, 1.0)
+        self.samples[worker].append(latency_ms / own)
+
+    @property
+    def correction(self) -> dict:
+        """Наружу для диагностики: во сколько раз замедлился каждый движок."""
+        return {("*", w): self._health(w) for w in WORKERS}
+
+
 class StaticRulePolicy(Policy):
     """
     Экспертное правило: фиксированное отображение маршрута на движок,

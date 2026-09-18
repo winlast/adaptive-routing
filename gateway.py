@@ -37,6 +37,7 @@ from core.policies import (
     AdaptiveOccupancyPolicy,
     AdaptiveBudgetPolicy,
     BlockingBudgetPolicy,
+    HealthAdaptiveBudgetPolicy,
     ExploringPolicy,
     FixedWorkerPolicy,
     LeastConnectionsPolicy,
@@ -138,12 +139,19 @@ def build_policy(name: str) -> tuple[Policy, object]:
         policy = BlockingBudgetPolicy(admit_est, float(budget), name=name,
                                       weight_estimator=weight_est)
         return policy, weight_est
-    if name.startswith("budget_") or name.startswith("adabudget_"):
+    if (name.startswith("budget_") or name.startswith("adabudget_")
+            or name.startswith("health_")
+            or name.startswith("healthfull_")):
         prefix, source, budget = name.split("_", 2)
         estimator = build_estimator(COST_POLICIES[f"work_{source}"])
         budget_ms = float("inf") if budget == "inf" else float(budget)
-        factory = (AdaptiveBudgetPolicy if prefix == "adabudget"
-                   else BlockingBudgetPolicy)
+        if prefix == "healthfull":
+            return (HealthAdaptiveBudgetPolicy(estimator, budget_ms,
+                                               name=name, rank_full=True),
+                    estimator)
+        factory = {"adabudget": AdaptiveBudgetPolicy,
+                   "health": HealthAdaptiveBudgetPolicy,
+                   "budget": BlockingBudgetPolicy}[prefix]
         return factory(estimator, budget_ms, name=name), estimator
     if name in COST_POLICIES:
         estimator = build_estimator(COST_POLICIES[name])
@@ -249,9 +257,17 @@ async def route(request: Request):
 @app.get("/health")
 async def health():
     counts, work = tracker.snapshot()
-    return {"status": "healthy", "policy": POLICY_NAME,
-            "workers": list(WORKERS), "inflight": counts,
-            "pending_work_ms": work}
+    payload = {"status": "healthy", "policy": POLICY_NAME,
+               "workers": list(WORKERS), "inflight": counts,
+               "pending_work_ms": work}
+    # Поправочные коэффициенты адаптивной политики. Выставлены наружу
+    # ради диагностики: без них нельзя отличить «поправка не помогает»
+    # от «поправка не успела сойтись», а это разные выводы.
+    correction = getattr(policy, "correction", None)
+    if correction:
+        payload["correction"] = {f"{e}|{w}": round(v, 2)
+                                 for (e, w), v in correction.items()}
+    return payload
 
 
 if __name__ == "__main__":
