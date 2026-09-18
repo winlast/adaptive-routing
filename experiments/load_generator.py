@@ -1,15 +1,21 @@
 """
 Генератор нагрузки на шлюз.
 
-Состав трафика намеренно неравномерный: лёгкие запросы преобладают, а
-тяжёлые встречаются редко — так устроен типичный веб-трафик, и именно
-поэтому маршрутизация нетривиальна. Если бы все запросы были одинаково
-частыми и одинаково тяжёлыми, оптимальная стратегия свелась бы к
-равномерному распределению.
+Поток запросов задаётся двумя распределениями: по маршрутам и по
+значению параметра внутри маршрута. Оба неравномерны и смещены к лёгкому
+концу — так устроен реальный веб-трафик. Именно из-за этого смещения
+средняя стоимость маршрута оказывается плохим описанием отдельного
+запроса: она подтягивается к частым дешёвым обращениям, а редкие тяжёлые,
+которые и создают очереди, в ней растворяются.
 
-Модуль используется и для сбора обучающих данных, и для финального
-сравнения политик, поэтому поток запросов для всех политик одинаков:
-последовательность эндпоинтов детерминирована зерном.
+Последовательность запросов детерминирована зерном, поэтому все политики
+сравниваются на буквально одном и том же потоке.
+
+Кроме общих показателей отдельно считаются показатели по лёгким
+обращениям (`/api/user/profile`). Это не украшение отчёта: смысл
+разделения трафика между движками в том, чтобы тяжёлое вычисление не
+останавливало обработку лёгких запросов, а в средней задержке по всему
+потоку этот эффект теряется.
 """
 from __future__ import annotations
 
@@ -24,9 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
 
+from core.workload import ENDPOINTS, sample_param
+
 GATEWAY_URL = "http://127.0.0.1:8300/route"
 
-# Доли запросов. Лёгкие эндпоинты доминируют, тяжёлые редки.
+# Доли запросов по маршрутам. Лёгкие обращения преобладают.
 TRAFFIC_MIX = {
     "/api/user/profile": 0.35,
     "/api/feed": 0.20,
@@ -36,27 +44,41 @@ TRAFFIC_MIX = {
     "/api/image/thumbnail": 0.05,
 }
 
-SLO_MS = 500.0  # порог, выше которого запрос считается нарушившим SLO
+# Маршрут, по которому отслеживается страдание лёгких запросов.
+LIGHT_ENDPOINT = "/api/user/profile"
+
+SLO_MS = 500.0
 
 
-def build_plan(total: int, seed: int = 20260918) -> list[str]:
-    """Детерминированная последовательность запросов по заданным долям."""
+def build_plan(total: int, seed: int = 20260918) -> list[tuple[str, int | None]]:
+    """Детерминированная последовательность пар «маршрут, параметр»."""
     rng = random.Random(seed)
     endpoints = list(TRAFFIC_MIX)
     weights = [TRAFFIC_MIX[e] for e in endpoints]
-    return rng.choices(endpoints, weights=weights, k=total)
+    plan = []
+    for _ in range(total):
+        endpoint = rng.choices(endpoints, weights=weights, k=1)[0]
+        plan.append((endpoint, sample_param(ENDPOINTS[endpoint], rng)))
+    return plan
 
 
 async def _client_loop(client, plan_slice, results, errors):
-    for endpoint in plan_slice:
+    for endpoint, param in plan_slice:
         start = time.perf_counter()
         try:
-            resp = await client.post(GATEWAY_URL, json={"endpoint": endpoint},
-                                     timeout=300)
+            resp = await client.post(
+                GATEWAY_URL, json={"endpoint": endpoint, "param": param},
+                timeout=600)
             resp.raise_for_status()
             results.append(((time.perf_counter() - start) * 1000, endpoint))
         except Exception as exc:
             errors.append(repr(exc))
+
+
+def _percentile(ordered: list[float], p: float) -> float:
+    if not ordered:
+        return float("nan")
+    return ordered[min(int(len(ordered) * p), len(ordered) - 1)]
 
 
 async def run_load(concurrency: int, total: int, seed: int = 20260918) -> dict:
@@ -80,8 +102,7 @@ async def run_load(concurrency: int, total: int, seed: int = 20260918) -> dict:
     if not values:
         return {"error": "нет успешных запросов", "errors": len(errors)}
 
-    def pct(p: float) -> float:
-        return values[min(int(len(values) * p), len(values) - 1)]
+    light = sorted(v for v, e in results if e == LIGHT_ENDPOINT)
 
     return {
         "concurrency": concurrency,
@@ -91,12 +112,22 @@ async def run_load(concurrency: int, total: int, seed: int = 20260918) -> dict:
         "wall_s": round(wall, 2),
         "rps": round(len(values) / wall, 2),
         "avg_ms": round(statistics.mean(values), 1),
-        "p50_ms": round(pct(0.50), 1),
-        "p95_ms": round(pct(0.95), 1),
-        "p99_ms": round(pct(0.99), 1),
-        "slo_violations": sum(1 for v in values if v > SLO_MS),
+        "p50_ms": round(_percentile(values, 0.50), 1),
+        "p95_ms": round(_percentile(values, 0.95), 1),
+        "p99_ms": round(_percentile(values, 0.99), 1),
+        # Лёгкие обращения — те, которые страдают от блокировки чужим
+        # вычислением. Ради них маршрутизация и делается.
+        "light_count": len(light),
+        "light_avg_ms": round(statistics.mean(light), 1) if light else None,
+        "light_p95_ms": round(_percentile(light, 0.95), 1) if light else None,
+        "light_p99_ms": round(_percentile(light, 0.99), 1) if light else None,
         "slo_violation_rate": round(
             sum(1 for v in values if v > SLO_MS) / len(values) * 100, 1),
+        # Сырые задержки нужны для бутстрэпа: доверительный интервал
+        # строится по объединённой выборке всех повторов, а не по трём
+        # усреднённым числам.
+        "_latencies": values,
+        "_light_latencies": light,
     }
 
 
@@ -111,7 +142,7 @@ async def main() -> None:
 
     res = await run_load(args.concurrency, args.total, args.seed)
     for key, value in res.items():
-        print(f"{key:>20}: {value}")
+        print(f"{key:>22}: {value}")
 
 
 if __name__ == "__main__":

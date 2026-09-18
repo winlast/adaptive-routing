@@ -1,0 +1,145 @@
+{
+  "all_sync": {
+    "rps": 28.03,
+    "rps_std": 0.0,
+    "p95": 3066.4,
+    "p99": 5845.1,
+    "light_p95": 916.5,
+    "light_p99": 1178.2,
+    "light_median": 97.7,
+    "slo": 31.6,
+    "n_light": 85
+  },
+  "all_async": {
+    "rps": 23.38,
+    "rps_std": 0.0,
+    "p95": 3192.6,
+    "p99": 4347.1,
+    "light_p95": 2873.4,
+    "light_p99": 3494.3,
+    "light_median": 872.7,
+    "slo": 72.0,
+    "n_light": 85
+  },
+  "least_conn": {
+    "rps": 43.2,
+    "rps_std": 0.0,
+    "p95": 1630.7,
+    "p99": 3256.0,
+    "light_p95": 1076.1,
+    "light_p99": 1567.0,
+    "light_median": 108.6,
+    "slo": 30.0,
+    "n_light": 85
+  },
+  "budget_endpoint_30": {
+    "rps": 31.94,
+    "rps_std": 0.0,
+    "p95": 2323.8,
+    "p99": 5441.8,
+    "light_p95": 92.3,
+    "light_p99": 128.9,
+    "light_median": 13.4,
+    "slo": 24.8,
+    "n_light": 85
+  },
+  "budget_endpoint_120": {
+    "rps": 37.1,
+    "rps_std": 0.0,
+    "p95": 2315.5,
+    "p99": 4412.3,
+    "light_p95": 501.0,
+    "light_p99": 578.4,
+    "light_median": 84.5,
+    "slo": 19.2,
+    "n_light": 85
+  },
+  "budget_linear_30": {
+    "rps": 30.6,
+    "rps_std": 0.0,
+    "p95": 2795.4,
+    "p99": 6094.8,
+    "light_p95": 200.2,
+    "light_p99": 378.5,
+    "light_median": 51.1,
+    "slo": 14.0,
+    "n_light": 85
+  },
+  "budget_linear_120": {
+    "rps": 41.99,
+    "rps_std": 0.0,
+    "p95": 1733.4,
+    "p99": 3418.6,
+    "light_p95": 654.4,
+    "light_p99": 797.7,
+    "light_median": 160.5,
+    "slo": 23.6,
+    "n_light": 85
+  },
+  "budget_power_30": {
+    "rps": 32.2,
+    "rps_std": 0.0,
+    "p95": 2862.6,
+    "p99": 5742.1,
+    "light_p95": 177.0,
+    "light_p99": 1377.0,
+    "light_median": 59.8,
+    "slo": 14.4,
+    "n_light": 85
+  },
+  "budget_power_120": {
+    "rps": 42.38,
+    "rps_std": 0.0,
+    "p95": 1373.0,
+    "p99": 2818.5,
+    "light_p95": 820.0,
+    "light_p99": 969.4,
+    "light_median": 220.6,
+    "slo": 32.0,
+    "n_light": 85
+  },
+  "budget_neural_30": {
+    "rps": 32.15,
+    "rps_std": 0.0,
+    "p95": 3035.4,
+    "p99": 6089.0,
+    "light_p95": 227.6,
+    "light_p99": 238.1,
+    "light_median": 67.3,
+    "slo": 14.4,
+    "n_light": 85
+  },
+  "budget_neural_120": {
+    "rps": 38.02,
+    "rps_std": 0.0,
+    "p95": 1619.8,
+    "p99": 4483.5,
+    "light_p95": 674.5,
+    "light_p99": 760.2,
+    "light_median": 214.8,
+    "slo": 30.8,
+    "n_light": 85
+  },
+  "budget_measured_30": {
+    "rps": 33.31,
+    "rps_std": 0.0,
+    "p95": 2453.8,
+    "p99": 4439.7,
+    "light_p95": 173.5,
+    "light_p99": 504.6,
+    "light_median": 63.9,
+    "slo": 18.0,
+    "n_light": 85
+  },
+  "budget_measured_120": {
+    "rps": 36.83,
+    "rps_std": 0.0,
+    "p95": 1884.0,
+    "p99": 3972.7,
+    "light_p95": 363.2,
+    "light_p99": 560.0,
+    "light_median": 145.1,
+    "slo": 13.6,
+    "n_light": 85
+  }
+}

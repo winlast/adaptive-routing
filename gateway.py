@@ -1,25 +1,23 @@
 """
-Шлюз: принимает запросы, выбирает воркера согласно политике, записывает
+Шлюз: принимает запросы, выбирает движок согласно политике, записывает
 фактические измерения.
 
-Политика задаётся переменной окружения POLICY и меняется без правки кода,
-чтобы все политики сравнивались в абсолютно одинаковых условиях — на том
-же шлюзе, том же клиенте и тех же воркерах.
+Политика задаётся переменной окружения POLICY и меняется без правки
+кода, чтобы все политики сравнивались в абсолютно одинаковых условиях —
+на том же шлюзе, том же клиенте и тех же движках.
 
-Шлюз ведёт счётчики in-flight: сколько запросов отправлено каждому
-воркеру и ещё не завершено. Это единственный источник информации о
-загрузке, доступный обычному прокси без кооперации с воркерами, и именно
-он передаётся политике как признак состояния системы.
+Шлюзу доступно ровно то, что доступно обычному обратному прокси:
+маршрут, значение параметра запроса, размер тела и собственный счётчик
+запросов, отправленных каждому движку и ещё не завершённых. Ни характер
+работы (вычисления или ожидание ввода-вывода), ни фактическая
+длительность запроса заранее не известны.
 
 Каждый обработанный запрос дописывается в CSV: признаки на момент
-решения, выбранный воркер и фактическая длительность. Из этих записей
-затем обучается модель, поэтому важно, что цель (латентность) измерена, а
-не вычислена по формуле.
+решения, выбранный движок и измеренная длительность.
 """
 from __future__ import annotations
 
 import csv
-import json
 import os
 import queue
 import sys
@@ -33,21 +31,20 @@ from fastapi.responses import JSONResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from core.cost_model import ConstantCost, build_estimator
 from core.policies import (
     WORKERS,
-    HybridPolicy,
-    AdaptiveWorkPolicy,
+    AdaptiveOccupancyPolicy,
+    BlockingBudgetPolicy,
     ExploringPolicy,
-    LeastExpectedWorkPolicy,
-    OnlineModelPolicy,
+    FixedWorkerPolicy,
     LeastConnectionsPolicy,
-    ModelPolicy,
-    OraclePolicy,
+    LeastOccupancyPolicy,
     Policy,
     RandomPolicy,
     RequestFeatures,
     RoundRobinPolicy,
-    build_static_rule_from_costs,
+    build_static_rule,
 )
 from core.queue_state import QueueTracker
 from core.workload import ENDPOINTS
@@ -61,17 +58,26 @@ WORKER_URLS = {
     "process": "http://127.0.0.1:8203/process",
 }
 
-POLICY_NAME = os.environ.get("POLICY", "random")
+POLICY_NAME = os.environ.get("POLICY", "least_conn")
 LOG_PATH = Path(os.environ.get("GATEWAY_LOG", DATA_DIR / "requests_log.csv"))
-COST_TABLE_PATH = DATA_DIR / "cost_table.json"
 
-LOG_FIELDS = [
-    "timestamp", "policy", "endpoint", "method", "payload_bytes",
-    "inflight_sync", "inflight_async", "inflight_process",
-    "work_sync", "work_async", "work_process",
-    "recent_sync", "recent_async", "recent_process",
-    "worker", "latency_ms", "error",
-]
+LOG_FIELDS = (
+    ["timestamp", "policy", "endpoint", "param", "payload_bytes"]
+    + [f"inflight_{w}" for w in WORKERS]
+    + [f"work_{w}" for w in WORKERS]
+    + ["worker", "latency_ms", "error"]
+)
+
+# Соответствие имени политики и источника оценки стоимости. Правило
+# выбора у всех этих политик одно и то же, различается только оценка —
+# ради этого набор и построен.
+COST_POLICIES = {
+    "work_endpoint": "endpoint_mean",
+    "work_linear": "linear_param",
+    "work_power": "power_law",
+    "work_neural": "neural",
+    "work_measured": "measured",
+}
 
 app = FastAPI()
 
@@ -85,7 +91,17 @@ log_queue: "queue.Queue" = queue.Queue()
 def _log_worker() -> None:
     """Пишет измерения в CSV из отдельного потока, не задерживая запросы."""
     DATA_DIR.mkdir(exist_ok=True)
-    new_file = not LOG_PATH.exists()
+    # Схема журнала зависит от набора движков. Если существующий файл
+    # написан с другим набором колонок, дописывать в него нельзя:
+    # значения разъедутся относительно заголовка, и последующий разбор
+    # даст молча неверные числа.
+    new_file = True
+    if LOG_PATH.exists():
+        with open(LOG_PATH, newline="", encoding="utf-8") as fh:
+            header = fh.readline().strip().split(",")
+        new_file = header != LOG_FIELDS
+        if new_file:
+            LOG_PATH.unlink()
     with open(LOG_PATH, "a", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=LOG_FIELDS)
         if new_file:
@@ -99,59 +115,57 @@ def _log_worker() -> None:
             fh.flush()
 
 
-def load_cost_table() -> dict[str, dict[str, float]]:
-    if COST_TABLE_PATH.exists():
-        return json.loads(COST_TABLE_PATH.read_text(encoding="utf-8"))
-    return {}
+def build_policy(name: str) -> tuple[Policy, object]:
+    """
+    Возвращает политику и оценку стоимости, которой взвешивается очередь.
 
-
-def build_policy(name: str) -> Policy:
-    if name == "random":
-        return RandomPolicy()
-    if name == "round_robin":
-        return RoundRobinPolicy()
-    if name == "least_conn":
-        return LeastConnectionsPolicy()
-    if name == "least_work":
-        return LeastExpectedWorkPolicy(load_cost_table())
-    if name == "adaptive_work":
-        return AdaptiveWorkPolicy(load_cost_table())
-    if name == "explore":
-        # Сбор обучающих данных в реалистичных состояниях системы.
-        return ExploringPolicy(LeastExpectedWorkPolicy(load_cost_table()),
-                               epsilon=0.35)
-    if name == "online_model":
-        from core.predictor import LatencyPredictor
-
-        return OnlineModelPolicy(LatencyPredictor.load())
+    Очередь взвешивается тем же источником, что использует политика:
+    политика с грубой оценкой одинаково грубо и взвешивает очередь, и
+    оценивает новый запрос — ровно так, как это произошло бы в реальной
+    системе, где другого источника у неё просто нет.
+    """
+    # budget_<оценка>_<порог в мс>: классификатор допускает запрос в
+    # асинхронный движок, только если предсказанная блокировка не
+    # превышает порога.
+    if name.startswith("budget_"):
+        _, source, budget = name.split("_", 2)
+        estimator = build_estimator(COST_POLICIES[f"work_{source}"])
+        budget_ms = float("inf") if budget == "inf" else float(budget)
+        return (BlockingBudgetPolicy(estimator, budget_ms, name=name),
+                estimator)
+    if name in COST_POLICIES:
+        estimator = build_estimator(COST_POLICIES[name])
+        return LeastOccupancyPolicy(estimator, name=name), estimator
+    if name.startswith("adaptive_"):
+        estimator = build_estimator(COST_POLICIES.get(
+            name.replace("adaptive_", ""), "endpoint_mean"))
+        return AdaptiveOccupancyPolicy(estimator, name=name), estimator
     if name == "static_rule":
-        return build_static_rule_from_costs(load_cost_table())
-    if name == "oracle":
-        return OraclePolicy(load_cost_table())
-    if name == "model":
-        from core.predictor import LatencyPredictor
+        return build_static_rule(), ConstantCost()
 
-        return ModelPolicy(LatencyPredictor.load(), marginal=True)
-    if name == "model_greedy":
-        from core.predictor import LatencyPredictor
-
-        return ModelPolicy(LatencyPredictor.load(), marginal=False)
-    if name.startswith("hybrid"):
-        from core.predictor import LatencyPredictor
-
-        slack = int(name.split("_")[1]) if "_" in name else 2
-        return HybridPolicy(LatencyPredictor.load(), slack=slack)
+    constant = ConstantCost()
+    if name.startswith("all_"):
+        return FixedWorkerPolicy(name[len("all_"):]), constant
+    if name == "random":
+        return RandomPolicy(), constant
+    if name == "round_robin":
+        return RoundRobinPolicy(), constant
+    if name == "least_conn":
+        return LeastConnectionsPolicy(), constant
+    if name == "explore":
+        base, estimator = build_policy("work_endpoint")
+        return ExploringPolicy(base, epsilon=0.35), estimator
     raise ValueError(f"Неизвестная политика: {name}")
 
 
 @app.on_event("startup")
 async def startup() -> None:
     global http_client, policy, tracker
-    tracker = QueueTracker(WORKERS, load_cost_table())
-    policy = build_policy(POLICY_NAME)
+    policy, estimator = build_policy(POLICY_NAME)
+    tracker = QueueTracker(WORKERS, estimator)
     http_client = httpx.AsyncClient(
-        limits=httpx.Limits(max_connections=600, max_keepalive_connections=600),
-        timeout=180.0,
+        limits=httpx.Limits(max_connections=800, max_keepalive_connections=800),
+        timeout=300.0,
     )
     threading.Thread(target=_log_worker, daemon=True).start()
 
@@ -167,28 +181,29 @@ async def shutdown() -> None:
 async def route(request: Request):
     body = await request.json()
     endpoint = body.get("endpoint")
+    param = body.get("param")
     spec = ENDPOINTS.get(endpoint)
 
-    snapshot, work_snapshot = tracker.snapshot()
-    recent = tracker.recent_latency()
-
+    counts, work = tracker.snapshot()
     features = RequestFeatures(
         endpoint=endpoint,
         method="POST",
         payload_bytes=spec.payload_bytes if spec else 0,
-        inflight=snapshot,
-        pending_work=work_snapshot,
-        recent_latency=recent,
+        param=param,
+        inflight=counts,
+        pending_work=work,
+        recent_latency=tracker.recent_latency(),
     )
 
     worker = policy.choose(features)
-    token = tracker.add(worker, endpoint)
+    token = tracker.add(worker, endpoint, param)
 
     start = time.perf_counter()
     error = ""
-    payload = {}
+    payload: dict = {}
     try:
-        resp = await http_client.post(WORKER_URLS[worker], json={"endpoint": endpoint})
+        resp = await http_client.post(
+            WORKER_URLS[worker], json={"endpoint": endpoint, "param": param})
         resp.raise_for_status()
         payload = resp.json()
     except Exception as exc:
@@ -196,33 +211,23 @@ async def route(request: Request):
     finally:
         latency_ms = (time.perf_counter() - start) * 1000
         tracker.remove(worker, token)
-        tracker.observe_latency(worker, endpoint, latency_ms)
+        tracker.observe_latency(worker, latency_ms)
 
-    log_queue.put({
-        "timestamp": time.time(),
-        "policy": POLICY_NAME,
-        "endpoint": endpoint,
-        "method": "POST",
-        "payload_bytes": features.payload_bytes,
-        "inflight_sync": snapshot.get("sync", 0),
-        "inflight_async": snapshot.get("async", 0),
-        "inflight_process": snapshot.get("process", 0),
-        "work_sync": round(work_snapshot.get("sync", 0.0), 1),
-        "work_async": round(work_snapshot.get("async", 0.0), 1),
-        "work_process": round(work_snapshot.get("process", 0.0), 1),
-        "recent_sync": round(recent.get("sync", 0.0), 1),
-        "recent_async": round(recent.get("async", 0.0), 1),
-        "recent_process": round(recent.get("process", 0.0), 1),
-        "worker": worker,
-        "latency_ms": round(latency_ms, 3),
-        "error": error,
-    })
+    entry = {
+        "timestamp": time.time(), "policy": POLICY_NAME, "endpoint": endpoint,
+        "param": param, "payload_bytes": features.payload_bytes,
+        "worker": worker, "latency_ms": round(latency_ms, 3), "error": error,
+    }
+    for w in WORKERS:
+        entry[f"inflight_{w}"] = counts.get(w, 0)
+        entry[f"work_{w}"] = round(work.get(w, 0.0), 1)
+    log_queue.put(entry)
 
     policy.observe(features, worker, latency_ms)
 
     if error:
-        return JSONResponse({"status": "error", "error": error, "worker": worker},
-                            status_code=502)
+        return JSONResponse({"status": "error", "error": error,
+                             "worker": worker}, status_code=502)
 
     payload["routed_to"] = worker
     payload["gateway_latency_ms"] = round(latency_ms, 3)
@@ -233,13 +238,12 @@ async def route(request: Request):
 async def health():
     counts, work = tracker.snapshot()
     return {"status": "healthy", "policy": POLICY_NAME,
-            "inflight": counts, "pending_work_ms": work}
+            "workers": list(WORKERS), "inflight": counts,
+            "pending_work_ms": work}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        app, host="127.0.0.1", port=8300,
-        log_level="warning", loop="uvloop", http="httptools",
-    )
+    uvicorn.run(app, host="127.0.0.1", port=8300,
+                log_level="warning", loop="uvloop", http="httptools")

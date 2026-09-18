@@ -1,122 +1,66 @@
 {
   "least_conn": {
-    "16": {
-      "rps_mean": 75.65,
-      "rps_std": 3.5,
-      "rps_runs": [
-        74.62,
-        79.55,
-        72.79
-      ],
-      "p95_mean": 403.8,
-      "slo_mean": 1.8
-    },
     "32": {
-      "rps_mean": 72.55,
-      "rps_std": 4.63,
+      "rps_mean": 45.16,
+      "rps_std": 0.0,
       "rps_runs": [
-        67.22,
-        74.81,
-        75.61
+        45.16
       ],
-      "p95_mean": 977.4,
-      "slo_mean": 18.6
+      "p95_mean": 1523.3,
+      "p99_mean": 3540.8,
+      "light_p95_mean": 874.9,
+      "light_p99_mean": 1344.5,
+      "light_avg_mean": 270.4,
+      "slo_mean": 28.5,
+      "errors": 0
     }
   },
-  "least_work": {
-    "16": {
-      "rps_mean": 80.68,
-      "rps_std": 2.61,
-      "rps_runs": [
-        77.89,
-        83.07,
-        81.08
-      ],
-      "p95_mean": 383.0,
-      "slo_mean": 2.2
-    },
+  "work_endpoint": {
     "32": {
-      "rps_mean": 77.17,
-      "rps_std": 3.56,
+      "rps_mean": 28.96,
+      "rps_std": 0.0,
       "rps_runs": [
-        77.25,
-        80.68,
-        73.57
+        28.96
       ],
-      "p95_mean": 770.3,
-      "slo_mean": 17.6
+      "p95_mean": 3065.0,
+      "p99_mean": 5653.5,
+      "light_p95_mean": 775.4,
+      "light_p99_mean": 1085.9,
+      "light_avg_mean": 235.4,
+      "slo_mean": 32.0,
+      "errors": 0
     }
   },
-  "model": {
-    "16": {
-      "rps_mean": 43.72,
-      "rps_std": 4.97,
-      "rps_runs": [
-        39.5,
-        42.47,
-        49.2
-      ],
-      "p95_mean": 965.5,
-      "slo_mean": 18.6
-    },
+  "work_neural": {
     "32": {
-      "rps_mean": 52.6,
-      "rps_std": 3.07,
+      "rps_mean": 46.11,
+      "rps_std": 0.0,
       "rps_runs": [
-        49.67,
-        55.8,
-        52.33
+        46.11
       ],
-      "p95_mean": 1811.5,
-      "slo_mean": 21.5
+      "p95_mean": 1452.1,
+      "p99_mean": 3446.7,
+      "light_p95_mean": 544.2,
+      "light_p99_mean": 947.8,
+      "light_avg_mean": 210.5,
+      "slo_mean": 16.0,
+      "errors": 0
     }
   },
-  "online_model": {
-    "16": {
-      "rps_mean": 70.81,
-      "rps_std": 0.5,
-      "rps_runs": [
-        71.24,
-        70.92,
-        70.26
-      ],
-      "p95_mean": 473.2,
-      "slo_mean": 4.3
-    },
+  "work_measured": {
     "32": {
-      "rps_mean": 71.15,
-      "rps_std": 2.03,
+      "rps_mean": 51.65,
+      "rps_std": 0.0,
       "rps_runs": [
-        68.82,
-        72.09,
-        72.53
+        51.65
       ],
-      "p95_mean": 926.6,
-      "slo_mean": 15.6
-    }
-  },
-  "oracle": {
-    "16": {
-      "rps_mean": 77.58,
-      "rps_std": 4.59,
-      "rps_runs": [
-        73.33,
-        82.45,
-        76.95
-      ],
-      "p95_mean": 337.9,
-      "slo_mean": 2.6
-    },
-    "32": {
-      "rps_mean": 76.57,
-      "rps_std": 9.8,
-      "rps_runs": [
-        73.14,
-        87.62,
-        68.94
-      ],
-      "p95_mean": 620.8,
-      "slo_mean": 14.0
+      "p95_mean": 1125.5,
+      "p99_mean": 1977.4,
+      "light_p95_mean": 913.0,
+      "light_p99_mean": 1169.9,
+      "light_avg_mean": 346.4,
+      "slo_mean": 28.5,
+      "errors": 0
     }
   }
 }

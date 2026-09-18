@@ -10,23 +10,35 @@
 
 Рассматриваются четыре источника оценки, от самого грубого к точному:
 
-  * `EndpointMeanCost` — одно число на эндпоинт, среднее по трафику.
-    Это то, что даёт обычное профилирование сервиса, и то, на чём
-    работают промышленные балансировщики с весами.
-  * `LinearParamCost` — экспертная поправка «стоимость пропорциональна
-    параметру запроса». Правило, которое разработчик может написать
-    руками, зная смысл параметра. Верно для выборок из базы и неверно
-    для операций, сложность которых растёт быстрее.
-  * `LearnedCost` — модель, обученная на журнале обращений. Показатель
-    зависимости стоимости от параметра ей не сообщается, она выводит
-    его из данных отдельно для каждого маршрута и каждого движка.
-  * `MeasuredCost` — таблица, снятая прямым профилированием по всем
-    значениям параметра. В работающей системе недоступна (требует
-    останавливающего замера по всей сетке), поэтому используется только
-    как верхняя граница достижимого.
+  * `ConstantCost` — оценки нет, все запросы считаются одинаковыми.
+    Подстановка этой оценки превращает правило выбора в обычный
+    least-connections, что и служит нижней точкой отсчёта.
+  * `EndpointMeanCost` — одно число на маршрут, среднее по трафику.
+    Это то, что даёт обычное профилирование сервиса по маршрутам.
+  * `LinearParamCost` — экспертная поправка «занятость пропорциональна
+    параметру запроса»: показатель степени принят равным единице, а
+    множитель подобран по замерам.
+  * `PowerLawCost` и `NeuralCost` (в `core/predictor.py`) — обучаемые
+    оценки. Показатель зависимости им не сообщается, они выводят его из
+    тех же замеров отдельно для каждого маршрута и каждого движка.
+  * `MeasuredCost` — таблица, снятая профилированием по всей сетке
+    значений параметра. В работающей системе недоступна, используется
+    только как верхняя граница достижимого.
 
-Все оценки возвращают величину в миллисекундах и имеют общий интерфейс
-`cost(endpoint, param, worker)`.
+Каждая оценка отвечает на два разных вопроса о запросе, и смешивать их
+нельзя:
+
+  * `cost` — сколько запрос будет выполняться сам плюс сколько он
+    задержит остальных. Эта величина сравнивается между движками при
+    выборе;
+  * `blocking` — на сколько запрос делает движок недоступным для
+    остальных. Этой величиной взвешивается очередь.
+
+Для ожидания ввода-вывода они расходятся радикально: обращение к
+внешнему сервису на 500 мс выполняется полсекунды, но движок при этом
+почти не занимает — ни в event loop, ни в потоке. Оценка, которая
+складывала бы по очереди полное время выполнения, приписала бы такому
+запросу вес, которого у него нет.
 """
 from __future__ import annotations
 
@@ -49,7 +61,13 @@ class CostEstimator:
     name = "base"
 
     def cost(self, endpoint: str, param: float | None, worker: str) -> float:
+        """Полная цена запроса: собственное время плюс задержка другим."""
         raise NotImplementedError
+
+    def blocking(self, endpoint: str, param: float | None,
+                 worker: str) -> float:
+        """Время, на которое запрос занимает движок для остальных."""
+        return self.cost(endpoint, param, worker)
 
 
 def load_grid() -> dict:
@@ -74,14 +92,22 @@ class MeasuredCost(CostEstimator):
         self.grid = grid if grid is not None else load_grid()
 
     def cost(self, endpoint: str, param: float | None, worker: str) -> float:
+        return self._interpolate(endpoint, param, worker, column=1)
+
+    def blocking(self, endpoint: str, param: float | None,
+                 worker: str) -> float:
+        return self._interpolate(endpoint, param, worker, column=2)
+
+    def _interpolate(self, endpoint: str, param: float | None, worker: str,
+                     column: int) -> float:
         row = self.grid.get(endpoint)
         if not row:
             return DEFAULT_COST_MS
         points = row.get(worker)
         if not points:
             return DEFAULT_COST_MS
-        params = [float(p) for p, _ in points]
-        values = [float(v) for _, v in points]
+        params = [float(p[0]) for p in points]
+        values = [float(p[column]) for p in points]
         if len(params) == 1 or param is None:
             return values[0]
         x = float(param)
@@ -97,73 +123,100 @@ class MeasuredCost(CostEstimator):
 
 class EndpointMeanCost(CostEstimator):
     """
-    Средняя стоимость эндпоинта, взвешенная по распределению параметра.
+    Одно число на маршрут — средняя занятость по наблюдавшемуся трафику.
 
-    Именно такую оценку даёт профилирование сервиса по маршрутам: она
-    верна «в среднем по больнице» и тем хуже описывает отдельный запрос,
+    Именно такую оценку даёт обычное профилирование сервиса по маршрутам
+    и именно на такой оценке работают промышленные балансировщики с
+    весами. Она верна в среднем и тем хуже описывает отдельный запрос,
     чем сильнее запросы внутри маршрута различаются между собой.
     """
 
     name = "endpoint_mean"
 
-    def __init__(self, grid: dict | None = None):
-        measured = MeasuredCost(grid)
-        self.table: dict[str, dict[str, float]] = {}
-        for endpoint, spec in ENDPOINTS.items():
-            values = spec.param_values if spec.param_name else (None,)
-            weights = spec.param_weights if spec.param_name else (1.0,)
-            row = {}
-            for worker in (measured.grid.get(endpoint) or {}):
-                total = sum(
-                    w * measured.cost(endpoint, p, worker)
-                    for p, w in zip(values, weights)
-                )
-                row[worker] = total / sum(weights)
-            self.table[endpoint] = row
+    def __init__(self, samples: list[dict]):
+        self.table = self._average(samples, "occupancy_ms")
+        self.block_table = self._average(samples, "block_ms")
+
+    @staticmethod
+    def _average(samples: list[dict], field: str) -> dict[str, dict[str, float]]:
+        totals: dict[tuple[str, str], list[float]] = {}
+        for row in samples:
+            totals.setdefault((row["endpoint"], row["worker"]), []).append(
+                row[field])
+        table: dict[str, dict[str, float]] = {}
+        for (endpoint, worker), values in totals.items():
+            table.setdefault(endpoint, {})[worker] = sum(values) / len(values)
+        return table
 
     def cost(self, endpoint: str, param: float | None, worker: str) -> float:
         return self.table.get(endpoint, {}).get(worker, DEFAULT_COST_MS)
 
+    def blocking(self, endpoint: str, param: float | None,
+                 worker: str) -> float:
+        return self.block_table.get(endpoint, {}).get(worker, DEFAULT_COST_MS)
+
 
 class LinearParamCost(CostEstimator):
     """
-    Экспертная поправка на параметр запроса в предположении, что
-    стоимость растёт пропорционально ему.
+    Экспертная поправка: занятость считается пропорциональной параметру.
 
-    Это сильный и совершенно реалистичный конкурент обучаемой модели:
-    разработчик, знающий смысл параметра `limit`, напишет такое правило
-    за пять минут. Проверяется ровно то, добавляет ли обучение что-то
-    сверх этого очевидного соображения.
+    Это сильный и совершенно реалистичный конкурент обучаемой оценки.
+    Разработчик, понимающий смысл параметра `limit`, напишет такое
+    правило за пять минут, не собирая никакой статистики сверх обычного
+    профилирования. Коэффициент подбирается по тем же замерам, что и у
+    остальных оценок; жёстко задан только показатель степени, принятый
+    равным единице.
+
+    Проверяется ровно одно: добавляет ли обучение что-нибудь сверх этого
+    очевидного соображения. Для выборок из базы правило верно, для
+    операций, сложность которых растёт быстрее длины запроса, — нет.
     """
 
     name = "linear_param"
 
-    def __init__(self, grid: dict | None = None):
-        self.measured = MeasuredCost(grid)
+    def __init__(self, samples: list[dict]):
+        self.table = self._fit(samples, "occupancy_ms")
+        self.block_table = self._fit(samples, "block_ms")
 
-    def cost(self, endpoint: str, param: float | None, worker: str) -> float:
+    @staticmethod
+    def _fit(samples: list[dict], field: str) -> dict[str, dict[str, float]]:
+        import math
+
+        groups: dict[tuple[str, str], list[float]] = {}
+        for row in samples:
+            spec = ENDPOINTS.get(row["endpoint"])
+            value = max(row[field], 1.0)
+            if spec is None or not spec.param_name or row.get("param") is None:
+                ratio = 1.0
+            else:
+                ratio = max(float(row["param"]), 1.0) / float(spec.param_base)
+            # Множитель подбирается при жёстко заданном показателе
+            # степени. Усреднение ведётся по логарифмам: распределение
+            # имеет тяжёлый правый хвост, и обычное среднее определялось
+            # бы несколькими самыми тяжёлыми замерами.
+            groups.setdefault((row["endpoint"], row["worker"]), []).append(
+                math.log(value / ratio))
+        table: dict[str, dict[str, float]] = {}
+        for (endpoint, worker), values in groups.items():
+            table.setdefault(endpoint, {})[worker] = math.exp(
+                sum(values) / len(values))
+        return table
+
+    def _scaled(self, table, endpoint: str, param: float | None,
+                worker: str) -> float:
+        base = table.get(endpoint, {}).get(worker, DEFAULT_COST_MS)
         spec = ENDPOINTS.get(endpoint)
-        base = self.measured.cost(endpoint, None, worker)
-        if spec is None or not spec.param_name:
-            return base
-        # Опорная точка — стоимость при базовом значении параметра.
-        base = self.measured.cost(endpoint, spec.param_base, worker)
-        if param is None:
+        if spec is None or not spec.param_name or param is None:
             return base
         ratio = max(float(param), 1.0) / float(spec.param_base)
         return max(base * ratio, 1.0)
 
-
-class LearnedCost(CostEstimator):
-    """Оценка стоимости обученной моделью."""
-
-    name = "learned"
-
-    def __init__(self, predictor):
-        self.predictor = predictor
-
     def cost(self, endpoint: str, param: float | None, worker: str) -> float:
-        return self.predictor.predict(endpoint, param, worker)
+        return self._scaled(self.table, endpoint, param, worker)
+
+    def blocking(self, endpoint: str, param: float | None,
+                 worker: str) -> float:
+        return self._scaled(self.block_table, endpoint, param, worker)
 
 
 class ConstantCost(CostEstimator):
@@ -179,17 +232,32 @@ class ConstantCost(CostEstimator):
 
 
 def build_estimator(name: str) -> CostEstimator:
-    grid = load_grid()
+    """
+    Собирает оценку стоимости по имени.
+
+    Все оценки, кроме `measured`, настраиваются на одном и том же наборе
+    замеров и отличаются исключительно видом зависимости. `measured`
+    читает полную таблицу профилирования по сетке значений параметра и
+    в работающей системе недоступна — она задаёт верхнюю границу.
+    """
     if name == "measured":
-        return MeasuredCost(grid)
-    if name == "endpoint_mean":
-        return EndpointMeanCost(grid)
-    if name == "linear_param":
-        return LinearParamCost(grid)
+        return MeasuredCost(load_grid())
     if name == "constant":
         return ConstantCost()
-    if name == "learned":
-        from core.predictor import CostPredictor
 
-        return LearnedCost(CostPredictor.load())
+    from core.predictor import load_samples
+
+    samples = load_samples()
+    if name == "endpoint_mean":
+        return EndpointMeanCost(samples)
+    if name == "linear_param":
+        return LinearParamCost(samples)
+    if name == "power_law":
+        from core.predictor import PowerLawCost
+
+        return PowerLawCost.load()
+    if name == "neural":
+        from core.predictor import NeuralCost
+
+        return NeuralCost.load()
     raise ValueError(f"Неизвестная оценка стоимости: {name}")

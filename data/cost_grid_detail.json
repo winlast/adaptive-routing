@@ -3,65 +3,77 @@
     "sync": [
       {
         "param": 10,
-        "own_ms": 16.9,
-        "damage_ms": 11.5
+        "own_ms": 11.6,
+        "block_ms": 6.8,
+        "damage_sum_ms": 6.8
       },
       {
         "param": 25,
-        "own_ms": 19.8,
-        "damage_ms": 13.3
+        "own_ms": 21.3,
+        "block_ms": 10.1,
+        "damage_sum_ms": 13.1
       },
       {
         "param": 50,
-        "own_ms": 26.9,
-        "damage_ms": 14.9
+        "own_ms": 26.5,
+        "block_ms": 9.9,
+        "damage_sum_ms": 13.6
       },
       {
         "param": 100,
-        "own_ms": 36.3,
-        "damage_ms": 10.9
+        "own_ms": 37.9,
+        "block_ms": 11.3,
+        "damage_sum_ms": 15.7
       },
       {
         "param": 200,
-        "own_ms": 60.1,
-        "damage_ms": 12.9
+        "own_ms": 64.0,
+        "block_ms": 10.6,
+        "damage_sum_ms": 22.4
       },
       {
         "param": 400,
-        "own_ms": 111.9,
-        "damage_ms": 14.7
+        "own_ms": 112.7,
+        "block_ms": 8.1,
+        "damage_sum_ms": 19.3
       }
     ],
     "async": [
       {
         "param": 10,
-        "own_ms": 12.9,
-        "damage_ms": 9.5
+        "own_ms": 10.0,
+        "block_ms": 7.4,
+        "damage_sum_ms": 7.4
       },
       {
         "param": 25,
-        "own_ms": 17.5,
-        "damage_ms": 11.3
+        "own_ms": 16.5,
+        "block_ms": 8.3,
+        "damage_sum_ms": 13.8
       },
       {
         "param": 50,
-        "own_ms": 23.3,
-        "damage_ms": 13.2
+        "own_ms": 23.2,
+        "block_ms": 8.0,
+        "damage_sum_ms": 13.9
       },
       {
         "param": 100,
-        "own_ms": 34.4,
-        "damage_ms": 14.6
+        "own_ms": 35.9,
+        "block_ms": 7.3,
+        "damage_sum_ms": 16.1
       },
       {
         "param": 200,
-        "own_ms": 58.6,
-        "damage_ms": 12.3
+        "own_ms": 59.0,
+        "block_ms": 8.2,
+        "damage_sum_ms": 24.0
       },
       {
         "param": 400,
-        "own_ms": 109.2,
-        "damage_ms": 19.2
+        "own_ms": 110.1,
+        "block_ms": 7.0,
+        "damage_sum_ms": 20.9
       }
     ]
   },
@@ -69,55 +81,65 @@
     "sync": [
       {
         "param": 20,
-        "own_ms": 35.5,
-        "damage_ms": 9.0
+        "own_ms": 34.6,
+        "block_ms": 7.9,
+        "damage_sum_ms": 16.9
       },
       {
         "param": 50,
-        "own_ms": 72.3,
-        "damage_ms": 17.2
+        "own_ms": 73.2,
+        "block_ms": 9.6,
+        "damage_sum_ms": 18.7
       },
       {
         "param": 100,
-        "own_ms": 131.0,
-        "damage_ms": 13.4
+        "own_ms": 133.3,
+        "block_ms": 9.3,
+        "damage_sum_ms": 21.4
       },
       {
         "param": 200,
-        "own_ms": 253.7,
-        "damage_ms": 15.3
+        "own_ms": 254.0,
+        "block_ms": 9.1,
+        "damage_sum_ms": 24.3
       },
       {
         "param": 400,
-        "own_ms": 492.9,
-        "damage_ms": 17.4
+        "own_ms": 494.7,
+        "block_ms": 9.2,
+        "damage_sum_ms": 39.1
       }
     ],
     "async": [
       {
         "param": 20,
-        "own_ms": 31.3,
-        "damage_ms": 11.3
+        "own_ms": 33.6,
+        "block_ms": 7.8,
+        "damage_sum_ms": 14.8
       },
       {
         "param": 50,
-        "own_ms": 69.9,
-        "damage_ms": 20.5
+        "own_ms": 69.0,
+        "block_ms": 7.2,
+        "damage_sum_ms": 24.3
       },
       {
         "param": 100,
-        "own_ms": 128.7,
-        "damage_ms": 30.8
+        "own_ms": 129.8,
+        "block_ms": 8.1,
+        "damage_sum_ms": 28.0
       },
       {
         "param": 200,
-        "own_ms": 248.1,
-        "damage_ms": 29.0
+        "own_ms": 247.4,
+        "block_ms": 7.0,
+        "damage_sum_ms": 22.2
       },
       {
         "param": 400,
-        "own_ms": 491.1,
-        "damage_ms": 45.8
+        "own_ms": 491.4,
+        "block_ms": 9.9,
+        "damage_sum_ms": 36.5
       }
     ]
   },
@@ -125,15 +147,17 @@
     "sync": [
       {
         "param": 1,
-        "own_ms": 128.8,
-        "damage_ms": 18.0
+        "own_ms": 130.2,
+        "block_ms": 9.3,
+        "damage_sum_ms": 18.4
       }
     ],
     "async": [
       {
         "param": 1,
-        "own_ms": 122.6,
-        "damage_ms": 120.7
+        "own_ms": 126.6,
+        "block_ms": 124.7,
+        "damage_sum_ms": 124.7
       }
     ]
   },
@@ -141,65 +165,77 @@
     "sync": [
       {
         "param": 400,
-        "own_ms": 13.7,
-        "damage_ms": 10.4
+        "own_ms": 21.5,
+        "block_ms": 17.7,
+        "damage_sum_ms": 17.7
       },
       {
         "param": 700,
-        "own_ms": 37.7,
-        "damage_ms": 31.3
+        "own_ms": 36.1,
+        "block_ms": 31.0,
+        "damage_sum_ms": 31.0
       },
       {
         "param": 1000,
-        "own_ms": 64.4,
-        "damage_ms": 52.1
+        "own_ms": 58.2,
+        "block_ms": 46.5,
+        "damage_sum_ms": 49.5
       },
       {
         "param": 1400,
-        "own_ms": 103.1,
-        "damage_ms": 85.1
+        "own_ms": 113.6,
+        "block_ms": 76.4,
+        "damage_sum_ms": 97.7
       },
       {
         "param": 1800,
-        "own_ms": 171.4,
-        "damage_ms": 145.2
+        "own_ms": 161.9,
+        "block_ms": 106.0,
+        "damage_sum_ms": 139.2
       },
       {
         "param": 2200,
-        "own_ms": 248.5,
-        "damage_ms": 215.4
+        "own_ms": 241.1,
+        "block_ms": 164.1,
+        "damage_sum_ms": 201.9
       }
     ],
     "async": [
       {
         "param": 400,
-        "own_ms": 15.6,
-        "damage_ms": 14.2
+        "own_ms": 23.0,
+        "block_ms": 22.1,
+        "damage_sum_ms": 22.1
       },
       {
         "param": 700,
-        "own_ms": 29.8,
-        "damage_ms": 28.6
+        "own_ms": 31.8,
+        "block_ms": 30.1,
+        "damage_sum_ms": 30.1
       },
       {
         "param": 1000,
-        "own_ms": 56.6,
-        "damage_ms": 54.4
+        "own_ms": 56.8,
+        "block_ms": 55.6,
+        "damage_sum_ms": 55.6
       },
       {
         "param": 1400,
-        "own_ms": 99.1,
-        "damage_ms": 97.2
+        "own_ms": 99.8,
+        "block_ms": 97.6,
+        "damage_sum_ms": 97.6
       },
       {
         "param": 1800,
-        "own_ms": 154.2,
-        "damage_ms": 151.9
+        "own_ms": 162.0,
+        "block_ms": 159.8,
+        "damage_sum_ms": 159.8
       },
       {
         "param": 2200,
-        "own_ms": 241.0,
-        "damage_ms": 238.5
+        "own_ms": 245.9,
+        "block_ms": 243.8,
+        "damage_sum_ms": 243.8
       }
     ]
   },
@@ -207,65 +243,77 @@
     "sync": [
       {
         "param": 10,
-        "own_ms": 24.2,
-        "damage_ms": 16.4
+        "own_ms": 23.4,
+        "block_ms": 16.3,
+        "damage_sum_ms": 17.0
       },
       {
         "param": 30,
-        "own_ms": 39.1,
-        "damage_ms": 24.9
+        "own_ms": 40.5,
+        "block_ms": 18.4,
+        "damage_sum_ms": 28.9
       },
       {
         "param": 60,
-        "own_ms": 63.9,
-        "damage_ms": 38.4
+        "own_ms": 66.3,
+        "block_ms": 32.2,
+        "damage_sum_ms": 48.2
       },
       {
         "param": 100,
-        "own_ms": 102.3,
-        "damage_ms": 64.8
+        "own_ms": 100.3,
+        "block_ms": 52.7,
+        "damage_sum_ms": 66.1
       },
       {
         "param": 250,
-        "own_ms": 253.1,
-        "damage_ms": 160.4
+        "own_ms": 253.5,
+        "block_ms": 148.8,
+        "damage_sum_ms": 164.6
       },
       {
         "param": 600,
-        "own_ms": 646.3,
-        "damage_ms": 429.7
+        "own_ms": 640.3,
+        "block_ms": 400.6,
+        "damage_sum_ms": 433.7
       }
     ],
     "async": [
       {
         "param": 10,
-        "own_ms": 24.1,
-        "damage_ms": 18.4
+        "own_ms": 17.1,
+        "block_ms": 8.8,
+        "damage_sum_ms": 10.4
       },
       {
         "param": 30,
-        "own_ms": 35.3,
-        "damage_ms": 25.3
+        "own_ms": 34.9,
+        "block_ms": 17.3,
+        "damage_sum_ms": 26.2
       },
       {
         "param": 60,
-        "own_ms": 61.5,
-        "damage_ms": 38.8
+        "own_ms": 61.7,
+        "block_ms": 31.8,
+        "damage_sum_ms": 43.2
       },
       {
         "param": 100,
-        "own_ms": 101.5,
-        "damage_ms": 66.3
+        "own_ms": 98.6,
+        "block_ms": 52.3,
+        "damage_sum_ms": 69.6
       },
       {
         "param": 250,
-        "own_ms": 249.7,
-        "damage_ms": 160.9
+        "own_ms": 262.7,
+        "block_ms": 165.1,
+        "damage_sum_ms": 188.7
       },
       {
         "param": 600,
-        "own_ms": 660.6,
-        "damage_ms": 499.9
+        "own_ms": 651.7,
+        "block_ms": 427.1,
+        "damage_sum_ms": 459.9
       }
     ]
   },
@@ -273,65 +321,77 @@
     "sync": [
       {
         "param": 8,
-        "own_ms": 25.7,
-        "damage_ms": 13.5
+        "own_ms": 26.1,
+        "block_ms": 12.9,
+        "damage_sum_ms": 16.7
       },
       {
         "param": 15,
-        "own_ms": 47.6,
-        "damage_ms": 17.2
+        "own_ms": 48.6,
+        "block_ms": 9.1,
+        "damage_sum_ms": 21.5
       },
       {
         "param": 30,
-        "own_ms": 149.3,
-        "damage_ms": 47.0
+        "own_ms": 152.5,
+        "block_ms": 31.9,
+        "damage_sum_ms": 51.0
       },
       {
         "param": 45,
-        "own_ms": 330.8,
-        "damage_ms": 95.1
+        "own_ms": 328.4,
+        "block_ms": 76.2,
+        "damage_sum_ms": 100.7
       },
       {
         "param": 60,
-        "own_ms": 598.8,
-        "damage_ms": 183.9
+        "own_ms": 597.5,
+        "block_ms": 141.8,
+        "damage_sum_ms": 189.5
       },
       {
         "param": 75,
-        "own_ms": 937.7,
-        "damage_ms": 296.3
+        "own_ms": 939.1,
+        "block_ms": 268.3,
+        "damage_sum_ms": 305.5
       }
     ],
     "async": [
       {
         "param": 8,
-        "own_ms": 20.8,
-        "damage_ms": 13.8
+        "own_ms": 24.4,
+        "block_ms": 18.4,
+        "damage_sum_ms": 19.3
       },
       {
         "param": 15,
-        "own_ms": 44.1,
-        "damage_ms": 32.6
+        "own_ms": 46.0,
+        "block_ms": 25.9,
+        "damage_sum_ms": 36.0
       },
       {
         "param": 30,
-        "own_ms": 151.3,
-        "damage_ms": 113.1
+        "own_ms": 147.8,
+        "block_ms": 91.9,
+        "damage_sum_ms": 112.8
       },
       {
         "param": 45,
-        "own_ms": 336.4,
-        "damage_ms": 249.7
+        "own_ms": 333.1,
+        "block_ms": 222.0,
+        "damage_sum_ms": 243.4
       },
       {
         "param": 60,
-        "own_ms": 590.4,
-        "damage_ms": 430.2
+        "own_ms": 584.8,
+        "block_ms": 394.2,
+        "damage_sum_ms": 425.8
       },
       {
         "param": 75,
-        "own_ms": 945.0,
-        "damage_ms": 682.6
+        "own_ms": 936.9,
+        "block_ms": 638.4,
+        "damage_sum_ms": 676.1
       }
     ]
   }

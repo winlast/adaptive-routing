@@ -76,11 +76,30 @@ async def probe_baseline(client: httpx.AsyncClient, worker: str) -> float:
 
 
 async def measure_pair(client: httpx.AsyncClient, worker: str, endpoint: str,
-                       param: int | None, probe_base: float) -> tuple[float, float]:
+                       param: int | None, probe_base: float
+                       ) -> tuple[float, float, float]:
     """
     Запускает запрос и одновременно обстреливает движок лёгкими
-    обращениями. Возвращает собственное время запроса и суммарную
-    задержку, накопленную лёгкими обращениями сверх их нормы.
+    обращениями.
+
+    Возвращает три величины: собственное время запроса, суммарную
+    задержку лёгких обращений сверх их нормы и наибольшую задержку
+    одного обращения.
+
+    Различие между суммой и максимумом здесь принципиально, а не
+    техническое. Сумма измеряет потерю пропускной способности: сколько
+    всего рабочего времени отобрано у остальных. Максимум измеряет
+    блокировку: насколько долго обработка остальных была остановлена
+    целиком. Для двух рассматриваемых движков эти величины расходятся.
+    В потоковом сервере планировщик переключает потоки каждые несколько
+    миллисекунд, поэтому лёгкий запрос, пришедший во время чужого
+    вычисления, продвигается порциями и завершается быстро — суммарная
+    потеря есть, блокировки нет. В event loop вычисление выполняется
+    неделимо, и лёгкий запрос ждёт его полностью.
+
+    Поскольку предметом работы является именно блокировка и её влияние
+    на хвост распределения задержек, для оценки занятости используется
+    максимум. Сумма сохраняется для сравнения и для отчёта.
     """
     probe_latencies: list[float] = []
     done = asyncio.Event()
@@ -104,8 +123,8 @@ async def measure_pair(client: httpx.AsyncClient, worker: str, endpoint: str,
     own = await heavy_task
     await probe_task
 
-    damage = sum(max(l - probe_base, 0.0) for l in probe_latencies)
-    return own, damage
+    excess = [max(l - probe_base, 0.0) for l in probe_latencies]
+    return own, sum(excess), (max(excess) if excess else 0.0)
 
 
 async def main() -> None:
@@ -122,7 +141,7 @@ async def main() -> None:
             print(f"лёгкое обращение на свободном движке {worker}: "
                   f"{base[worker]:.1f} мс")
 
-        header = "".join(f"{w + ' own':>12}{w + ' ущерб':>14}" for w in WORKERS)
+        header = "".join(f"{w + ' own':>12}{w + ' блок':>13}" for w in WORKERS)
         print(f"\n{'маршрут':<24}{'параметр':>9}{header}")
         print("-" * (33 + 26 * len(WORKERS)))
 
@@ -133,24 +152,28 @@ async def main() -> None:
             for param in values:
                 line = f"{endpoint:<24}{str(param):>9}"
                 for worker in WORKERS:
-                    owns, damages = [], []
+                    owns, sums, maxes = [], [], []
                     for _ in range(REPEATS):
-                        own, dmg = await measure_pair(client, worker, endpoint,
-                                                      param, base[worker])
+                        own, dsum, dmax = await measure_pair(
+                            client, worker, endpoint, param, base[worker])
                         owns.append(own)
-                        damages.append(dmg)
+                        sums.append(dsum)
+                        maxes.append(dmax)
                         await asyncio.sleep(0.05)
                     own_m = statistics.median(owns)
-                    dmg_m = statistics.median(damages)
+                    sum_m = statistics.median(sums)
+                    dmg_m = statistics.median(maxes)
                     # Занятость движка этим запросом: собственное время
-                    # плюс задержка, причинённая остальным.
+                    # плюс наибольшая блокировка, которую он создаёт.
                     occupancy = own_m + dmg_m
                     key = spec.param_base if param is None else param
-                    grid[endpoint][worker].append([key, round(occupancy, 1)])
+                    grid[endpoint][worker].append(
+                        [key, round(occupancy, 1), round(dmg_m, 1)])
                     detail[endpoint][worker].append(
                         {"param": key, "own_ms": round(own_m, 1),
-                         "damage_ms": round(dmg_m, 1)})
-                    line += f"{own_m:>12.0f}{dmg_m:>14.0f}"
+                         "block_ms": round(dmg_m, 1),
+                         "damage_sum_ms": round(sum_m, 1)})
+                    line += f"{own_m:>12.0f}{dmg_m:>13.0f}"
                 print(line, flush=True)
 
     OUTPUT.write_text(json.dumps(grid, indent=2, ensure_ascii=False),

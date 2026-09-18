@@ -126,25 +126,100 @@ class LeastOccupancyPolicy(Policy):
     Выбор движка по наименьшей ожидаемой занятости после добавления
     запроса.
 
-    Величина, которая складывается по очереди, — не собственное время
-    выполнения запроса, а занятость движка: собственное время плюс
-    задержка, которую запрос причинит остальным. Разделение существенно:
-    вычисление на 600 мс в потоковом сервере почти не мешает соседям
-    (операция освобождает GIL), а в event loop останавливает их все, и
-    складывать поэтому нужно разные числа.
+    Складываются и сравниваются при этом разные величины, и это
+    существенно. По очереди суммируется блокировка — время, на которое
+    движок недоступен остальным. Ожидание внешнего сервиса на 500 мс
+    движок почти не занимает и в очередь весом не входит, тогда как
+    вычисление на 500 мс занимает его целиком. К накопленной блокировке
+    прибавляется полная цена нового запроса: его собственное время плюс
+    задержка, которую он причинит остальным.
 
-    Источник оценки задаётся извне, и именно он различает политики.
+    Источник обеих оценок задаётся извне, и именно он различает
+    политики.
     """
+
+    # Чем оценивается вклад нового запроса в занятость движка. Величина
+    # выбрана по результатам замеров и обе возможности сохранены, потому
+    # что выбор между ними — содержательное решение, а не деталь.
+    #
+    #   "block" — только блокировка: время, на которое движок становится
+    #             недоступен остальным. Собственное время выполнения в
+    #             сравнении движков не участвует, и это оправдано тем,
+    #             что оно, по измерениям, почти не зависит от движка и
+    #             потому при сравнении сокращается.
+    #   "full"  — блокировка плюс собственное время выполнения.
+    SCORE = os.environ.get("SCORE", "block")
 
     def __init__(self, estimator, name: str = "occupancy"):
         self.estimator = estimator
         self.name = name
 
+    def _added(self, features: RequestFeatures, worker: str) -> float:
+        if self.SCORE == "full":
+            return self.estimator.cost(features.endpoint, features.param,
+                                       worker)
+        return self.estimator.blocking(features.endpoint, features.param,
+                                       worker)
+
     def choose(self, features: RequestFeatures) -> str:
         return min(
             WORKERS,
             key=lambda w: features.pending_work.get(w, 0.0)
-            + self.estimator.cost(features.endpoint, features.param, w),
+            + self._added(features, w),
+        )
+
+
+class BlockingBudgetPolicy(Policy):
+    """
+    Маршрутизация с ограничением на блокировку асинхронного движка.
+
+    Постановка отвечает тому, чем задача является физически.
+    Асинхронный движок выгоден ровно до тех пор, пока в него не попадает
+    вычислительная работа: одна такая задача останавливает обработку
+    всех остальных запросов до своего завершения. Поэтому решение,
+    которое нужно принять по каждому запросу, — не «какой движок
+    быстрее», а «безопасно ли пускать этот запрос в event loop».
+
+    Политика оценивает, на сколько запрос заблокирует движок, и
+    допускает его в асинхронный движок только если эта величина не
+    превышает заданного порога. Синхронный движок принимает всё:
+    вычисление в потоке никого не останавливает целиком, планировщик
+    продолжает переключать потоки. Среди допустимых движков выбирается
+    тот, у которого меньше накопленная занятость.
+
+    Порог — не настроечная константа, а параметр компромисса. При нуле
+    весь трафик уходит в синхронный движок, при бесконечности политика
+    вырождается в обычную балансировку по весу очереди. Промежуточные
+    значения задают кривую «пропускная способность против хвоста
+    задержек», и качество оценки блокировки определяет, насколько
+    выгодной эта кривая окажется: грубая оценка вынуждена относить к
+    опасным целые маршруты, точная разделяет запросы внутри маршрута.
+    """
+
+    def __init__(self, estimator, budget_ms: float,
+                 safe_worker: str = "sync", guarded_worker: str = "async",
+                 name: str = "budget"):
+        self.estimator = estimator
+        self.budget_ms = budget_ms
+        self.safe_worker = safe_worker
+        self.guarded_worker = guarded_worker
+        self.name = name
+
+    def choose(self, features: RequestFeatures) -> str:
+        candidates = []
+        for worker in WORKERS:
+            if worker == self.guarded_worker:
+                predicted = self.estimator.blocking(
+                    features.endpoint, features.param, worker)
+                if predicted > self.budget_ms:
+                    continue
+            candidates.append(worker)
+        if not candidates:
+            return self.safe_worker if self.safe_worker in WORKERS else WORKERS[0]
+        return min(
+            candidates,
+            key=lambda w: features.pending_work.get(w, 0.0)
+            + self.estimator.blocking(features.endpoint, features.param, w),
         )
 
 
@@ -192,13 +267,13 @@ class AdaptiveOccupancyPolicy(LeastOccupancyPolicy):
         return min(
             WORKERS,
             key=lambda w: features.pending_work.get(w, 0.0)
-            + self.estimator.cost(features.endpoint, features.param, w)
+            + self._added(features, w)
             * self.correction.get((features.endpoint, w), 1.0),
         )
 
     def observe(self, features: RequestFeatures, worker: str,
                 latency_ms: float) -> None:
-        expected = self.estimator.cost(features.endpoint, features.param, worker)
+        expected = self._added(features, worker)
         queue_delay = features.pending_work.get(worker, 0.0)
         own = max(latency_ms - queue_delay, 1.0)
         if expected <= 0:
@@ -240,14 +315,23 @@ class ExploringPolicy(Policy):
         self.base.observe(features, worker, latency_ms)
 
 
-def build_static_rule(estimator) -> StaticRulePolicy:
+def build_static_rule() -> StaticRulePolicy:
     """
-    Строит экспертное правило: для каждого маршрута выбирается движок с
-    наименьшей средней занятостью.
+    Строит экспертное правило — прямую формализацию исходной гипотезы
+    работы: маршруты, занятые преимущественно ожиданием ввода-вывода,
+    обслуживает асинхронный движок, маршруты с вычислениями —
+    синхронный. Маршруты смешанного типа содержат заметную
+    вычислительную часть и относятся к синхронным.
+
+    Правило составляется человеком по типу маршрута, не использует
+    никаких замеров и не меняется во время работы.
     """
-    mapping = {}
-    for endpoint in getattr(estimator, "table", {}):
-        row = estimator.table[endpoint]
-        if row:
-            mapping[endpoint] = min(row, key=row.get)
-    return StaticRulePolicy(mapping, default=WORKERS[0])
+    from core.workload import ENDPOINTS
+
+    async_worker = "async" if "async" in WORKERS else WORKERS[-1]
+    sync_worker = "sync" if "sync" in WORKERS else WORKERS[0]
+    mapping = {
+        endpoint: (async_worker if spec.kind == "io" else sync_worker)
+        for endpoint, spec in ENDPOINTS.items()
+    }
+    return StaticRulePolicy(mapping, default=sync_worker)
