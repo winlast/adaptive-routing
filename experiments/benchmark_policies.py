@@ -14,8 +14,10 @@
                   различает характер запроса;
   static_rule   — экспертное правило «эндпоинт -> воркер», составленное
                   по профилированию системы под нагрузкой;
-  model         — обучаемая политика, предсказывает латентность на каждом
-                  воркере с учётом текущих очередей;
+  model_greedy  — обучаемая политика, минимизирующая латентность самого
+                  запроса по текущему состоянию очередей;
+  model         — та же модель, но оценивающая воркера по очереди, которая
+                  образуется после постановки в неё текущего запроса;
   oracle        — знает измеренные стоимости заранее, физически
                   нереализуем, задаёт верхнюю границу достижимого.
 
@@ -42,9 +44,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_PATH = DATA_DIR / "policy_comparison.json"
 
-POLICIES = ["random", "round_robin", "least_conn", "static_rule", "model", "oracle"]
+POLICIES = ["least_conn", "static_rule", "model", "hybrid_1", "hybrid_2", "oracle"]
 CONCURRENCY_LEVELS = [16, 32]
 REQUESTS = 300
+REPEATS = 3  # повторы для оценки разброса
 SEED = 777
 
 
@@ -74,48 +77,64 @@ def start_gateway(policy: str) -> subprocess.Popen:
 
 
 async def main() -> None:
+    import statistics
+
     results: dict[str, dict] = {}
 
     for concurrency in CONCURRENCY_LEVELS:
-        print(f"\n{'='*72}\nКонкурентность {concurrency}, {REQUESTS} запросов "
-              f"на политику\n{'='*72}")
-        print(f"{'политика':<14}{'rps':>8}{'avg':>9}{'p50':>9}{'p95':>9}"
-              f"{'p99':>9}{'SLO%':>8}")
-        print("-" * 72)
+        print(f"\n{'='*78}\nКонкурентность {concurrency}, {REQUESTS} запросов, "
+              f"{REPEATS} повтора\n{'='*78}")
+        print(f"{'политика':<14}{'rps (среднее±разброс)':>24}{'p95':>10}"
+              f"{'SLO%':>8}")
+        print("-" * 78)
 
         for policy in POLICIES:
-            stop_gateway()
-            proc = start_gateway(policy)
-            try:
-                # Прогрев: первые запросы наполняют кеши и пул процессов.
-                await run_load(4, 30, seed=1)
-                await asyncio.sleep(2)
-                res = await run_load(concurrency, REQUESTS, seed=SEED)
-            finally:
-                proc.send_signal(signal.SIGTERM)
-                time.sleep(1.5)
+            runs = []
+            for repeat in range(REPEATS):
+                stop_gateway()
+                proc = start_gateway(policy)
+                try:
+                    await run_load(4, 30, seed=1)  # прогрев
+                    await asyncio.sleep(2)
+                    runs.append(await run_load(concurrency, REQUESTS,
+                                               seed=SEED + repeat))
+                finally:
+                    proc.send_signal(signal.SIGTERM)
+                    time.sleep(1.5)
+                await asyncio.sleep(1)
 
-            results.setdefault(policy, {})[str(concurrency)] = res
-            print(f"{policy:<14}{res['rps']:>8}{res['avg_ms']:>9}"
-                  f"{res['p50_ms']:>9}{res['p95_ms']:>9}{res['p99_ms']:>9}"
-                  f"{res['slo_violation_rate']:>8}")
-            await asyncio.sleep(2)
+            rps = [r["rps"] for r in runs]
+            p95 = [r["p95_ms"] for r in runs]
+            slo = [r["slo_violation_rate"] for r in runs]
+            agg = {
+                "rps_mean": round(statistics.mean(rps), 2),
+                "rps_std": round(statistics.stdev(rps), 2) if len(rps) > 1 else 0.0,
+                "rps_runs": rps,
+                "p95_mean": round(statistics.mean(p95), 1),
+                "slo_mean": round(statistics.mean(slo), 1),
+            }
+            results.setdefault(policy, {})[str(concurrency)] = agg
+            print(f"{policy:<14}{agg['rps_mean']:>16} ± {agg['rps_std']:<5}"
+                  f"{agg['p95_mean']:>10}{agg['slo_mean']:>8}")
 
     RESULTS_PATH.write_text(json.dumps(results, indent=2, ensure_ascii=False),
                             encoding="utf-8")
     print(f"\nРезультаты сохранены: {RESULTS_PATH}")
 
-    print("\nГлавное сравнение — обучаемая политика против экспертной статики:")
+    print("\nСравнение с least-connections (главный конкурент):")
     for concurrency in CONCURRENCY_LEVELS:
         c = str(concurrency)
-        model = results["model"][c]
-        static = results["static_rule"][c]
-        oracle = results["oracle"][c]
-        gain = (model["rps"] - static["rps"]) / static["rps"] * 100
-        to_oracle = (model["rps"] - oracle["rps"]) / oracle["rps"] * 100
-        print(f"  конкурентность {concurrency}: "
-              f"model {model['rps']} rps против static {static['rps']} rps "
-              f"({gain:+.1f}%), до oracle {to_oracle:+.1f}%")
+        base = results["least_conn"][c]
+        print(f"  конкурентность {concurrency}:")
+        for policy in POLICIES:
+            if policy == "least_conn":
+                continue
+            cur = results[policy][c]
+            diff = (cur["rps_mean"] - base["rps_mean"]) / base["rps_mean"] * 100
+            spread = base["rps_std"] + cur["rps_std"]
+            verdict = "в пределах разброса" if abs(
+                cur["rps_mean"] - base["rps_mean"]) < spread else "значимо"
+            print(f"    {policy:<14}{diff:+6.1f}%  ({verdict})")
 
 
 if __name__ == "__main__":

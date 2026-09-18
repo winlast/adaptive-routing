@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.policies import (
     WORKERS,
+    HybridPolicy,
     LeastConnectionsPolicy,
     ModelPolicy,
     OraclePolicy,
@@ -112,7 +113,16 @@ def build_policy(name: str) -> Policy:
     if name == "model":
         from core.predictor import LatencyPredictor
 
-        return ModelPolicy(LatencyPredictor.load())
+        return ModelPolicy(LatencyPredictor.load(), marginal=True)
+    if name == "model_greedy":
+        from core.predictor import LatencyPredictor
+
+        return ModelPolicy(LatencyPredictor.load(), marginal=False)
+    if name.startswith("hybrid"):
+        from core.predictor import LatencyPredictor
+
+        slack = int(name.split("_")[1]) if "_" in name else 2
+        return HybridPolicy(LatencyPredictor.load(), slack=slack)
     raise ValueError(f"Неизвестная политика: {name}")
 
 

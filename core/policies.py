@@ -156,16 +156,78 @@ class ModelPolicy(Policy):
     на вход ей подаётся и текущее состояние очередей. Поэтому её решение
     может меняться для одного и того же эндпоинта в зависимости от
     загрузки — чего статическое правило по построению не умеет.
+
+    Режим marginal учитывает, что решение само меняет состояние системы:
+    воркер оценивается по очереди, которая образуется ПОСЛЕ постановки
+    в неё текущего запроса. Без этой поправки политика оценивает всех
+    кандидатов по текущему состоянию, стабильно выбирает быстрейший
+    воркер и в результате перегружает его, оставляя более медленные
+    простаивать — а простаивающий воркер это потерянная пропускная
+    способность системы, даже если он медленный.
     """
 
     name = "model"
 
-    def __init__(self, predictor):
+    def __init__(self, predictor, marginal: bool = True):
         self.predictor = predictor
+        self.marginal = marginal
 
     def choose(self, features: RequestFeatures) -> str:
+        if not self.marginal:
+            predictions = self.predictor.predict_all_workers(features)
+            return min(predictions, key=predictions.get)
+
+        best_worker = None
+        best_latency = float("inf")
+        for worker in WORKERS:
+            probe = RequestFeatures(
+                endpoint=features.endpoint,
+                method=features.method,
+                payload_bytes=features.payload_bytes,
+                inflight={
+                    w: features.inflight.get(w, 0) + (1 if w == worker else 0)
+                    for w in WORKERS
+                },
+            )
+            latency = self.predictor.predict_all_workers(probe)[worker]
+            if latency < best_latency:
+                best_latency = latency
+                best_worker = worker
+        return best_worker
+
+
+class HybridPolicy(Policy):
+    """
+    Гибрид балансировки и предсказания.
+
+    Эксперимент показал, что least-connections выигрывает по пропускной
+    способности за счёт простого выравнивания загрузки, а обучаемая
+    политика лучше различает характер запросов, но склонна перегружать
+    быстрейший воркер. Гибрид разделяет эти роли: сначала балансировка
+    отсекает воркеров, чья очередь длиннее минимальной больше чем на
+    slack, а затем модель выбирает лучший из оставшихся.
+
+    При slack = 0 политика вырождается в least-connections, при
+    бесконечном slack — в чистое предсказание. Промежуточные значения
+    позволяют проверить, где проходит граница полезности модели.
+    """
+
+    name = "hybrid"
+
+    def __init__(self, predictor, slack: int = 2):
+        self.predictor = predictor
+        self.slack = slack
+
+    def choose(self, features: RequestFeatures) -> str:
+        inflight = features.inflight
+        min_load = min(inflight.get(w, 0) for w in WORKERS)
+        candidates = [w for w in WORKERS
+                      if inflight.get(w, 0) <= min_load + self.slack]
+        if len(candidates) == 1:
+            return candidates[0]
+
         predictions = self.predictor.predict_all_workers(features)
-        return min(predictions, key=predictions.get)
+        return min(candidates, key=lambda w: predictions[w])
 
 
 def build_static_rule_from_costs(cost_table: dict[str, dict[str, float]]
