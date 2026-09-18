@@ -42,16 +42,18 @@ FEATURE_NAMES = (
     + ["payload_bytes"]
     + [f"inflight_{w}" for w in WORKERS]
     + [f"pending_work_{w}" for w in WORKERS]
+    + [f"recent_latency_{w}" for w in WORKERS]
     + [f"worker={w}" for w in WORKERS]
 )
 N_FEATURES = len(FEATURE_NAMES)
 
 
 def encode(endpoint: str, payload_bytes: int, inflight: dict[str, int],
-           worker: str, pending_work: dict[str, float] | None = None
-           ) -> list[float]:
+           worker: str, pending_work: dict[str, float] | None = None,
+           recent_latency: dict[str, float] | None = None) -> list[float]:
     """Превращает состояние в вектор признаков."""
     pending_work = pending_work or {}
+    recent_latency = recent_latency or {}
     row = [0.0] * N_FEATURES
     if endpoint in ENDPOINT_NAMES:
         row[ENDPOINT_NAMES.index(endpoint)] = 1.0
@@ -63,6 +65,9 @@ def encode(endpoint: str, payload_bytes: int, inflight: dict[str, int],
     base += len(WORKERS)
     for i, w in enumerate(WORKERS):
         row[base + i] = float(pending_work.get(w, 0.0))
+    base += len(WORKERS)
+    for i, w in enumerate(WORKERS):
+        row[base + i] = float(recent_latency.get(w, 0.0))
     base += len(WORKERS)
     for i, w in enumerate(WORKERS):
         if w == worker:
@@ -99,7 +104,8 @@ class LatencyPredictor:
         """Предсказывает латентность на каждом воркере для одного запроса."""
         rows = [
             encode(features.endpoint, features.payload_bytes,
-                   features.inflight, worker, features.pending_work)
+                   features.inflight, worker, features.pending_work,
+                   features.recent_latency)
             for worker in WORKERS
         ]
         scaled = self.scaler.transform(np.array(rows, dtype=np.float32))

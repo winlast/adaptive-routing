@@ -41,6 +41,7 @@ class QueueTracker:
         }
         self._lock = threading.Lock()
         self._counter = 0
+        self._recent_latency: dict[str, float] = {}
 
     def expected_cost(self, endpoint: str, worker: str) -> float:
         """Ожидаемая стоимость запроса на воркере по таблице замеров."""
@@ -90,6 +91,27 @@ class QueueTracker:
                     total += max(req.expected_ms - elapsed, 0.0)
                 result[worker] = total
             return result
+
+    def observe_latency(self, worker: str, endpoint: str,
+                        latency_ms: float, alpha: float = 0.2) -> None:
+        """
+        Запоминает фактическую скорость ответа воркера.
+
+        Таблица стоимостей отражает то, каким воркер был на момент
+        замера. Эта оценка отражает то, каким он стал: если процессов
+        стало меньше или рядом появился шумный сосед, разница проявится
+        здесь в течение нескольких запросов.
+        """
+        with self._lock:
+            previous = self._recent_latency.get(worker)
+            self._recent_latency[worker] = (
+                latency_ms if previous is None
+                else (1 - alpha) * previous + alpha * latency_ms
+            )
+
+    def recent_latency(self) -> dict[str, float]:
+        with self._lock:
+            return {w: self._recent_latency.get(w, 0.0) for w in self._workers}
 
     def snapshot(self) -> tuple[dict[str, int], dict[str, float]]:
         """Согласованный снимок длин очередей и объёма работы в них."""

@@ -13,6 +13,9 @@
     "pending_work_sync",
     "pending_work_async",
     "pending_work_process",
+    "recent_latency_sync",
+    "recent_latency_async",
+    "recent_latency_process",
     "worker=sync",
     "worker=async",
     "worker=process"

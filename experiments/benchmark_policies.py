@@ -44,7 +44,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_PATH = DATA_DIR / "policy_comparison.json"
 
-POLICIES = ["least_conn", "least_work", "model", "hybrid_2", "oracle"]
+POLICIES = ["least_conn", "least_work", "model", "online_model", "oracle"]
 CONCURRENCY_LEVELS = [16, 32]
 REQUESTS = 300
 REPEATS = 3  # повторы для оценки разброса

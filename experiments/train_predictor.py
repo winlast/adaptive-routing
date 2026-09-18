@@ -51,7 +51,9 @@ def load_dataset() -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
                 "process": r.inflight_process},
                r.worker,
                {"sync": r.work_sync, "async": r.work_async,
-                "process": r.work_process})
+                "process": r.work_process},
+               {"sync": r.recent_sync, "async": r.recent_async,
+                "process": r.recent_process})
         for r in df.itertuples()
     ]
     X = np.array(rows, dtype=np.float32)
@@ -120,9 +122,13 @@ def best_worker_accuracy(model: LatencyNet, scaler, df: pd.DataFrame) -> float:
         median_work = {
             w: float(df[f"work_{w}"].median()) for w in WORKERS
         }
+        median_recent = {
+            w: float(df[f"recent_{w}"].median()) for w in WORKERS
+        }
         feats = np.array(
             [encode(endpoint, int(df[df.endpoint == endpoint]["payload_bytes"].iloc[0]),
-                    median_inflight, w, median_work) for w in WORKERS],
+                    median_inflight, w, median_work, median_recent)
+             for w in WORKERS],
             dtype=np.float32,
         )
         with torch.no_grad():

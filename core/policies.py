@@ -42,6 +42,9 @@ class RequestFeatures:
     # этой величины нет у least-connections: он считает задачи, не
     # различая лёгкие и тяжёлые.
     pending_work: dict[str, float] = field(default_factory=dict)
+    # Фактическая скорость ответа воркера в последние запросы. Отражает
+    # текущее состояние, а не то, каким оно было на момент профилирования.
+    recent_latency: dict[str, float] = field(default_factory=dict)
 
     def inflight_vector(self) -> list[int]:
         return [self.inflight.get(w, 0) for w in WORKERS]
@@ -386,3 +389,37 @@ class OnlineModelPolicy(Policy):
         key = (features.endpoint, worker)
         previous = self.correction.get(key, 1.0)
         self.correction[key] = (1 - self.alpha) * previous + self.alpha * ratio
+
+
+class ExploringPolicy(Policy):
+    """
+    Обёртка, подмешивающая случайный выбор к решениям базовой политики.
+
+    Нужна для сбора обучающих данных. Если собирать их разумной политикой,
+    в лог попадут только те пары «запрос-воркер», которые она и так
+    считает удачными, и модель никогда не увидит, чем плохи остальные
+    варианты. Если собирать полностью случайно — данные будут описывать
+    состояния, которых в реальной работе не возникает, и модель окажется
+    обучена на несуществующем мире. Это известная проблема смещения
+    распределения, и именно она стоила первой версии модели её качества.
+
+    Компромисс: основную часть решений принимает рабочая политика, а в
+    заданной доле случаев выбор делается случайно. Так состояния системы
+    остаются реалистичными, но покрытие вариантов сохраняется.
+    """
+
+    name = "exploring"
+
+    def __init__(self, base: Policy, epsilon: float = 0.3, seed: int = 0):
+        self.base = base
+        self.epsilon = epsilon
+        self._rng = random.Random(seed)
+
+    def choose(self, features: RequestFeatures) -> str:
+        if self._rng.random() < self.epsilon:
+            return self._rng.choice(WORKERS)
+        return self.base.choose(features)
+
+    def observe(self, features: RequestFeatures, worker: str,
+                latency_ms: float) -> None:
+        self.base.observe(features, worker, latency_ms)

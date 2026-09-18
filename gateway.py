@@ -37,6 +37,7 @@ from core.policies import (
     WORKERS,
     HybridPolicy,
     AdaptiveWorkPolicy,
+    ExploringPolicy,
     LeastExpectedWorkPolicy,
     OnlineModelPolicy,
     LeastConnectionsPolicy,
@@ -68,6 +69,7 @@ LOG_FIELDS = [
     "timestamp", "policy", "endpoint", "method", "payload_bytes",
     "inflight_sync", "inflight_async", "inflight_process",
     "work_sync", "work_async", "work_process",
+    "recent_sync", "recent_async", "recent_process",
     "worker", "latency_ms", "error",
 ]
 
@@ -114,6 +116,10 @@ def build_policy(name: str) -> Policy:
         return LeastExpectedWorkPolicy(load_cost_table())
     if name == "adaptive_work":
         return AdaptiveWorkPolicy(load_cost_table())
+    if name == "explore":
+        # Сбор обучающих данных в реалистичных состояниях системы.
+        return ExploringPolicy(LeastExpectedWorkPolicy(load_cost_table()),
+                               epsilon=0.35)
     if name == "online_model":
         from core.predictor import LatencyPredictor
 
@@ -164,6 +170,7 @@ async def route(request: Request):
     spec = ENDPOINTS.get(endpoint)
 
     snapshot, work_snapshot = tracker.snapshot()
+    recent = tracker.recent_latency()
 
     features = RequestFeatures(
         endpoint=endpoint,
@@ -171,6 +178,7 @@ async def route(request: Request):
         payload_bytes=spec.payload_bytes if spec else 0,
         inflight=snapshot,
         pending_work=work_snapshot,
+        recent_latency=recent,
     )
 
     worker = policy.choose(features)
@@ -188,6 +196,7 @@ async def route(request: Request):
     finally:
         latency_ms = (time.perf_counter() - start) * 1000
         tracker.remove(worker, token)
+        tracker.observe_latency(worker, endpoint, latency_ms)
 
     log_queue.put({
         "timestamp": time.time(),
@@ -201,6 +210,9 @@ async def route(request: Request):
         "work_sync": round(work_snapshot.get("sync", 0.0), 1),
         "work_async": round(work_snapshot.get("async", 0.0), 1),
         "work_process": round(work_snapshot.get("process", 0.0), 1),
+        "recent_sync": round(recent.get("sync", 0.0), 1),
+        "recent_async": round(recent.get("async", 0.0), 1),
+        "recent_process": round(recent.get("process", 0.0), 1),
         "worker": worker,
         "latency_ms": round(latency_ms, 3),
         "error": error,
