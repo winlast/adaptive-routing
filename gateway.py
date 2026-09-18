@@ -128,6 +128,16 @@ def build_policy(name: str) -> tuple[Policy, object]:
     # budget_<оценка>_<порог в мс>: классификатор допускает запрос в
     # асинхронный движок, только если предсказанная блокировка не
     # превышает порога.
+    # split_<оценка для допуска>_<оценка для взвешивания>_<порог>:
+    # разводит две роли оценки по разным источникам, чтобы выяснить,
+    # какая из них определяет результат.
+    if name.startswith("split_"):
+        _, admit, weight, budget = name.split("_", 3)
+        admit_est = build_estimator(COST_POLICIES[f"work_{admit}"])
+        weight_est = build_estimator(COST_POLICIES[f"work_{weight}"])
+        policy = BlockingBudgetPolicy(admit_est, float(budget), name=name,
+                                      weight_estimator=weight_est)
+        return policy, weight_est
     if name.startswith("budget_") or name.startswith("adabudget_"):
         prefix, source, budget = name.split("_", 2)
         estimator = build_estimator(COST_POLICIES[f"work_{source}"])

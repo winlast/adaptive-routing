@@ -10,9 +10,9 @@
 
 и отличаются исключительно тем, откуда берётся вторая величина. Если
 подставить туда константу, правило вырождается в least-connections; если
-подставить точную измеренную величину — получается верхняя граница
-достижимого. Всё остальное лежит между ними, и расстояние между
-крайностями показывает, сколько вообще можно выиграть за счёт понимания
+подставить величину, снятую прямым профилированием по всей сетке
+значений параметра, — получается оценка без всякого моделирования.
+Расстояние между этими случаями показывает, сколько даёт понимание
 того, насколько тяжёл конкретный запрос.
 
 Отдельно стоят две политики, которые маршрутизации не выполняют вовсе:
@@ -198,8 +198,17 @@ class BlockingBudgetPolicy(Policy):
 
     def __init__(self, estimator, budget_ms: float,
                  safe_worker: str = "sync", guarded_worker: str = "async",
-                 name: str = "budget"):
+                 name: str = "budget", weight_estimator=None):
+        # Оценка используется в двух разных ролях, и требования к ней в
+        # этих ролях различаются. Для допуска достаточно правильно
+        # упорядочить запросы относительно порога: любая оценка,
+        # монотонная по параметру, справится. Для взвешивания очереди
+        # нужна верная абсолютная величина в миллисекундах, потому что
+        # значения складываются между собой и сравниваются между
+        # движками. Раздельные источники позволяют проверить, какая из
+        # двух ролей на самом деле определяет результат.
         self.estimator = estimator
+        self.weight_estimator = weight_estimator or estimator
         self.budget_ms = budget_ms
         self.safe_worker = safe_worker
         self.guarded_worker = guarded_worker
@@ -219,7 +228,8 @@ class BlockingBudgetPolicy(Policy):
         return min(
             candidates,
             key=lambda w: features.pending_work.get(w, 0.0)
-            + self.estimator.blocking(features.endpoint, features.param, w),
+            + self.weight_estimator.blocking(features.endpoint,
+                                             features.param, w),
         )
 
 
