@@ -10,6 +10,9 @@
     "inflight_sync",
     "inflight_async",
     "inflight_process",
+    "pending_work_sync",
+    "pending_work_async",
+    "pending_work_process",
     "worker=sync",
     "worker=async",
     "worker=process"
