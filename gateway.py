@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core.policies import (
     WORKERS,
     HybridPolicy,
+    LeastExpectedWorkPolicy,
     LeastConnectionsPolicy,
     ModelPolicy,
     OraclePolicy,
@@ -45,6 +46,7 @@ from core.policies import (
     RoundRobinPolicy,
     build_static_rule_from_costs,
 )
+from core.queue_state import QueueTracker
 from core.workload import ENDPOINTS
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -63,13 +65,13 @@ COST_TABLE_PATH = DATA_DIR / "cost_table.json"
 LOG_FIELDS = [
     "timestamp", "policy", "endpoint", "method", "payload_bytes",
     "inflight_sync", "inflight_async", "inflight_process",
+    "work_sync", "work_async", "work_process",
     "worker", "latency_ms", "error",
 ]
 
 app = FastAPI()
 
-inflight: dict[str, int] = {w: 0 for w in WORKERS}
-inflight_lock = threading.Lock()
+tracker: QueueTracker | None = None
 http_client: httpx.AsyncClient | None = None
 policy: Policy | None = None
 
@@ -106,6 +108,8 @@ def build_policy(name: str) -> Policy:
         return RoundRobinPolicy()
     if name == "least_conn":
         return LeastConnectionsPolicy()
+    if name == "least_work":
+        return LeastExpectedWorkPolicy(load_cost_table())
     if name == "static_rule":
         return build_static_rule_from_costs(load_cost_table())
     if name == "oracle":
@@ -128,7 +132,8 @@ def build_policy(name: str) -> Policy:
 
 @app.on_event("startup")
 async def startup() -> None:
-    global http_client, policy
+    global http_client, policy, tracker
+    tracker = QueueTracker(WORKERS, load_cost_table())
     policy = build_policy(POLICY_NAME)
     http_client = httpx.AsyncClient(
         limits=httpx.Limits(max_connections=600, max_keepalive_connections=600),
@@ -150,20 +155,18 @@ async def route(request: Request):
     endpoint = body.get("endpoint")
     spec = ENDPOINTS.get(endpoint)
 
-    with inflight_lock:
-        snapshot = dict(inflight)
+    snapshot, work_snapshot = tracker.snapshot()
 
     features = RequestFeatures(
         endpoint=endpoint,
         method="POST",
         payload_bytes=spec.payload_bytes if spec else 0,
         inflight=snapshot,
+        pending_work=work_snapshot,
     )
 
     worker = policy.choose(features)
-
-    with inflight_lock:
-        inflight[worker] += 1
+    token = tracker.add(worker, endpoint)
 
     start = time.perf_counter()
     error = ""
@@ -176,8 +179,7 @@ async def route(request: Request):
         error = type(exc).__name__
     finally:
         latency_ms = (time.perf_counter() - start) * 1000
-        with inflight_lock:
-            inflight[worker] -= 1
+        tracker.remove(worker, token)
 
     log_queue.put({
         "timestamp": time.time(),
@@ -188,6 +190,9 @@ async def route(request: Request):
         "inflight_sync": snapshot.get("sync", 0),
         "inflight_async": snapshot.get("async", 0),
         "inflight_process": snapshot.get("process", 0),
+        "work_sync": round(work_snapshot.get("sync", 0.0), 1),
+        "work_async": round(work_snapshot.get("async", 0.0), 1),
+        "work_process": round(work_snapshot.get("process", 0.0), 1),
         "worker": worker,
         "latency_ms": round(latency_ms, 3),
         "error": error,
@@ -206,7 +211,9 @@ async def route(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "policy": POLICY_NAME, "inflight": inflight}
+    counts, work = tracker.snapshot()
+    return {"status": "healthy", "policy": POLICY_NAME,
+            "inflight": counts, "pending_work_ms": work}
 
 
 if __name__ == "__main__":

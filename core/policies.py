@@ -38,9 +38,16 @@ class RequestFeatures:
     method: str
     payload_bytes: int
     inflight: dict[str, int] = field(default_factory=dict)
+    # Оценка оставшейся работы на каждом воркере в миллисекундах. Именно
+    # этой величины нет у least-connections: он считает задачи, не
+    # различая лёгкие и тяжёлые.
+    pending_work: dict[str, float] = field(default_factory=dict)
 
     def inflight_vector(self) -> list[int]:
         return [self.inflight.get(w, 0) for w in WORKERS]
+
+    def work_vector(self) -> list[float]:
+        return [self.pending_work.get(w, 0.0) for w in WORKERS]
 
 
 class Policy:
@@ -94,6 +101,39 @@ class LeastConnectionsPolicy(Policy):
     def choose(self, features: RequestFeatures) -> str:
         inflight = features.inflight
         return min(WORKERS, key=lambda w: inflight.get(w, 0))
+
+
+class LeastExpectedWorkPolicy(Policy):
+    """
+    Выбор воркера с наименьшим ожидаемым объёмом работы в очереди.
+
+    Отличается от least-connections тем, что взвешивает очередь: пять
+    лёгких запросов и пять тяжёлых для него разные состояния. Стоимость
+    берётся из таблицы замеров, никакого обучения здесь нет — это честный
+    сильный baseline, который проверяет, нужна ли вообще модель, или
+    достаточно учитывать вес очереди арифметически.
+    """
+
+    name = "least_work"
+
+    def __init__(self, cost_table: dict[str, dict[str, float]],
+                 default_cost_ms: float = 150.0):
+        self.cost_table = cost_table
+        self.default_cost = default_cost_ms
+
+    def _cost(self, endpoint: str, worker: str) -> float:
+        row = self.cost_table.get(endpoint)
+        if not row:
+            return self.default_cost
+        value = row.get(worker)
+        return float(value) if value is not None else self.default_cost
+
+    def choose(self, features: RequestFeatures) -> str:
+        return min(
+            WORKERS,
+            key=lambda w: features.pending_work.get(w, 0.0)
+            + self._cost(features.endpoint, w),
+        )
 
 
 class StaticRulePolicy(Policy):
