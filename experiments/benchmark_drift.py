@@ -9,7 +9,13 @@
 Реальные системы так себя не ведут. Внешний сервис деградирует, база
 замедляется под нагрузкой, меняется профиль трафика — и любая
 предвычисленная таблица устаревает. Здесь это воспроизводится прямо:
-в середине прогона внешняя зависимость начинает отвечать втрое медленнее.
+в середине прогона один из воркеров теряет большую часть своей ёмкости —
+у пула процессов остаётся одно рабочее место из четырёх. Это ухудшение
+асимметрично: оно меняет относительный порядок воркеров, поэтому
+оптимальный выбор действительно смещается, и политике есть к чему
+приспосабливаться. Предыдущая версия эксперимента замедляла общую
+внешнюю зависимость, отчего все воркеры дорожали одинаково и
+адаптироваться было не к чему.
 
 Смысл замера — отделить политики, которые подстраиваются под изменение,
 от тех, которые продолжают действовать по устаревшим представлениям.
@@ -46,12 +52,13 @@ RESULTS_PATH = DATA_DIR / "drift_comparison.json"
 
 GATEWAY_URL = "http://127.0.0.1:8300/route"
 STUB_CONTROL = "http://127.0.0.1:8100/slowdown"
+PROCESS_CAPACITY = "http://127.0.0.1:8203/capacity"
 
 POLICIES = ["least_conn", "least_work", "adaptive_work", "online_model"]
 CONCURRENCY = 24
 REQUESTS_BEFORE = 250   # стационарный режим
 REQUESTS_AFTER = 350    # после деградации зависимости
-SLOWDOWN_FACTOR = 3.0
+DEGRADED_CAPACITY = 1   # у пула процессов остаётся одно место из четырёх
 REPEATS = 2
 
 
@@ -79,8 +86,9 @@ def start_gateway(policy: str) -> subprocess.Popen:
     raise RuntimeError(f"Шлюз не поднялся с политикой {policy}")
 
 
-def set_slowdown(factor: float) -> None:
-    httpx.post(STUB_CONTROL, params={"factor": factor}, timeout=10)
+def set_capacity(workers: int) -> None:
+    """Меняет ёмкость процессного воркера, ухудшая его относительно других."""
+    httpx.post(PROCESS_CAPACITY, params={"workers": workers}, timeout=10)
 
 
 async def _worker_loop(client, plan_slice, results):
@@ -123,7 +131,8 @@ async def main() -> None:
     results: dict[str, dict] = {}
 
     print(f"Конкурентность {CONCURRENCY}. Фаза 1 — обычный режим, "
-          f"фаза 2 — внешний сервис замедлен в {SLOWDOWN_FACTOR:g} раза.")
+          f"фаза 2 — у процессного воркера осталось {DEGRADED_CAPACITY} место "
+          f"из 4.")
     print(f"{'политика':<16}{'до: avg':>10}{'до: SLO%':>10}"
           f"{'после: avg':>13}{'после: SLO%':>13}{'рост avg':>11}")
     print("-" * 74)
@@ -131,18 +140,18 @@ async def main() -> None:
     for policy in POLICIES:
         before_runs, after_runs = [], []
         for repeat in range(REPEATS):
-            set_slowdown(1.0)
+            set_capacity(4)
             stop_gateway()
             proc = start_gateway(policy)
             try:
                 await run_phase(40, seed=1)          # прогрев
                 before = await run_phase(REQUESTS_BEFORE, seed=500 + repeat)
-                set_slowdown(SLOWDOWN_FACTOR)        # зависимость деградировала
+                set_capacity(DEGRADED_CAPACITY)      # воркер потерял ресурсы
                 after = await run_phase(REQUESTS_AFTER, seed=900 + repeat)
             finally:
                 proc.send_signal(signal.SIGTERM)
                 time.sleep(1.5)
-                set_slowdown(1.0)
+                set_capacity(4)
             before_runs += before
             after_runs += after
             await asyncio.sleep(2)
@@ -156,6 +165,9 @@ async def main() -> None:
     RESULTS_PATH.write_text(json.dumps(results, indent=2, ensure_ascii=False),
                             encoding="utf-8")
     print(f"\nРезультаты сохранены: {RESULTS_PATH}")
+
+    print("\nДоля трафика на деградировавший воркер после ухудшения —")
+    print("ключевой показатель: заметила ли политика, что он испортился.")
 
     fixed = results["least_work"]["after"]
     adaptive = results["adaptive_work"]["after"]
