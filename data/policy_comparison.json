@@ -1,212 +1,146 @@
 {
-  "random": {
-    "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.92,
-      "rps": 50.65,
-      "avg_ms": 263.0,
-      "p50_ms": 161.4,
-      "p95_ms": 900.2,
-      "p99_ms": 1261.8,
-      "slo_violations": 49,
-      "slo_violation_rate": 16.3
-    },
-    "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.44,
-      "rps": 55.18,
-      "avg_ms": 447.9,
-      "p50_ms": 259.5,
-      "p95_ms": 1419.4,
-      "p99_ms": 1978.1,
-      "slo_violations": 99,
-      "slo_violation_rate": 33.0
-    }
-  },
-  "round_robin": {
-    "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 6.25,
-      "rps": 48.04,
-      "avg_ms": 265.8,
-      "p50_ms": 143.7,
-      "p95_ms": 995.6,
-      "p99_ms": 1615.8,
-      "slo_violations": 47,
-      "slo_violation_rate": 15.7
-    },
-    "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.82,
-      "rps": 51.58,
-      "avg_ms": 444.6,
-      "p50_ms": 212.6,
-      "p95_ms": 1426.9,
-      "p99_ms": 1917.6,
-      "slo_violations": 90,
-      "slo_violation_rate": 30.0
-    }
-  },
   "least_conn": {
     "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 4.61,
-      "rps": 65.07,
-      "avg_ms": 179.8,
-      "p50_ms": 143.8,
-      "p95_ms": 479.8,
-      "p99_ms": 690.2,
-      "slo_violations": 13,
-      "slo_violation_rate": 4.3
+      "rps_mean": 71.84,
+      "rps_std": 4.73,
+      "rps_runs": [
+        70.87,
+        76.98,
+        67.67
+      ],
+      "p95_mean": 451.3,
+      "slo_mean": 3.0
     },
     "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 4.49,
-      "rps": 66.8,
-      "avg_ms": 367.4,
-      "p50_ms": 295.7,
-      "p95_ms": 994.7,
-      "p99_ms": 1364.1,
-      "slo_violations": 64,
-      "slo_violation_rate": 21.3
+      "rps_mean": 67.46,
+      "rps_std": 3.13,
+      "rps_runs": [
+        66.77,
+        70.88,
+        64.73
+      ],
+      "p95_mean": 973.7,
+      "slo_mean": 20.4
     }
   },
   "static_rule": {
     "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.07,
-      "rps": 59.22,
-      "avg_ms": 233.2,
-      "p50_ms": 203.4,
-      "p95_ms": 616.9,
-      "p99_ms": 831.1,
-      "slo_violations": 25,
-      "slo_violation_rate": 8.3
+      "rps_mean": 58.82,
+      "rps_std": 5.93,
+      "rps_runs": [
+        53.28,
+        65.08,
+        58.11
+      ],
+      "p95_mean": 721.1,
+      "slo_mean": 9.0
     },
     "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.97,
-      "rps": 50.23,
-      "avg_ms": 473.1,
-      "p50_ms": 269.3,
-      "p95_ms": 1411.9,
-      "p99_ms": 1877.2,
-      "slo_violations": 91,
-      "slo_violation_rate": 30.3
-    }
-  },
-  "model_greedy": {
-    "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.13,
-      "rps": 58.45,
-      "avg_ms": 247.7,
-      "p50_ms": 244.3,
-      "p95_ms": 532.4,
-      "p99_ms": 721.2,
-      "slo_violations": 17,
-      "slo_violation_rate": 5.7
-    },
-    "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.06,
-      "rps": 59.3,
-      "avg_ms": 449.6,
-      "p50_ms": 438.9,
-      "p95_ms": 936.8,
-      "p99_ms": 1478.3,
-      "slo_violations": 101,
-      "slo_violation_rate": 33.7
+      "rps_mean": 50.85,
+      "rps_std": 3.68,
+      "rps_runs": [
+        48.27,
+        55.07,
+        49.21
+      ],
+      "p95_mean": 1696.6,
+      "slo_mean": 31.7
     }
   },
   "model": {
     "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.11,
-      "rps": 58.73,
-      "avg_ms": 232.7,
-      "p50_ms": 222.0,
-      "p95_ms": 465.9,
-      "p99_ms": 1038.7,
-      "slo_violations": 11,
-      "slo_violation_rate": 3.7
+      "rps_mean": 58.57,
+      "rps_std": 5.56,
+      "rps_runs": [
+        55.99,
+        64.95,
+        54.78
+      ],
+      "p95_mean": 532.6,
+      "slo_mean": 5.4
     },
     "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 5.63,
-      "rps": 53.29,
-      "avg_ms": 455.2,
-      "p50_ms": 378.6,
-      "p95_ms": 1239.3,
-      "p99_ms": 3393.9,
-      "slo_violations": 66,
-      "slo_violation_rate": 22.0
+      "rps_mean": 56.83,
+      "rps_std": 3.52,
+      "rps_runs": [
+        54.35,
+        60.85,
+        55.28
+      ],
+      "p95_mean": 1223.8,
+      "slo_mean": 27.1
+    }
+  },
+  "hybrid_1": {
+    "16": {
+      "rps_mean": 71.65,
+      "rps_std": 4.53,
+      "rps_runs": [
+        69.93,
+        76.78,
+        68.23
+      ],
+      "p95_mean": 452.4,
+      "slo_mean": 4.1
+    },
+    "32": {
+      "rps_mean": 68.67,
+      "rps_std": 3.33,
+      "rps_runs": [
+        66.21,
+        72.46,
+        67.33
+      ],
+      "p95_mean": 977.7,
+      "slo_mean": 18.3
+    }
+  },
+  "hybrid_2": {
+    "16": {
+      "rps_mean": 68.25,
+      "rps_std": 4.48,
+      "rps_runs": [
+        68.59,
+        72.55,
+        63.61
+      ],
+      "p95_mean": 481.5,
+      "slo_mean": 4.2
+    },
+    "32": {
+      "rps_mean": 68.84,
+      "rps_std": 2.13,
+      "rps_runs": [
+        71.13,
+        66.91,
+        68.49
+      ],
+      "p95_mean": 1006.7,
+      "slo_mean": 17.2
     }
   },
   "oracle": {
     "16": {
-      "concurrency": 16,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 4.68,
-      "rps": 64.06,
-      "avg_ms": 173.2,
-      "p50_ms": 150.2,
-      "p95_ms": 379.7,
-      "p99_ms": 861.3,
-      "slo_violations": 8,
-      "slo_violation_rate": 2.7
+      "rps_mean": 72.13,
+      "rps_std": 5.4,
+      "rps_runs": [
+        70.6,
+        78.13,
+        67.67
+      ],
+      "p95_mean": 369.8,
+      "slo_mean": 3.4
     },
     "32": {
-      "concurrency": 32,
-      "total": 300,
-      "completed": 300,
-      "errors": 0,
-      "wall_s": 4.34,
-      "rps": 69.12,
-      "avg_ms": 339.3,
-      "p50_ms": 273.4,
-      "p95_ms": 815.4,
-      "p99_ms": 1742.6,
-      "slo_violations": 66,
-      "slo_violation_rate": 22.0
+      "rps_mean": 73.38,
+      "rps_std": 7.63,
+      "rps_runs": [
+        72.22,
+        81.52,
+        66.4
+      ],
+      "p95_mean": 645.1,
+      "slo_mean": 16.9
     }
   }
 }

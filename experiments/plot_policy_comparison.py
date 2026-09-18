@@ -19,19 +19,19 @@ RESULTS_PATH = BASE_DIR / "data" / "policy_comparison.json"
 FIGURES_DIR = BASE_DIR / "figures"
 
 LABELS = {
-    "random": "Случайная",
-    "round_robin": "Round-robin",
     "least_conn": "Least-connections",
     "static_rule": "Экспертное правило",
-    "model": "Обучаемая политика",
+    "model": "Только модель",
+    "hybrid_1": "Гибрид (slack=1)",
+    "hybrid_2": "Гибрид (slack=2)",
     "oracle": "Оракул (верхняя граница)",
 }
 COLORS = {
-    "random": "#999999",
-    "round_robin": "#8C8C8C",
     "least_conn": "#1976D2",
     "static_rule": "#F57C00",
-    "model": "#2E7D32",
+    "model": "#C62828",
+    "hybrid_1": "#66BB6A",
+    "hybrid_2": "#2E7D32",
     "oracle": "#7B1FA2",
 }
 
@@ -44,9 +44,9 @@ def main() -> None:
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
     metrics = [
-        ("rps", "Пропускная способность", "запросов/с", False),
-        ("p95_ms", "Хвостовая задержка p95", "мс", True),
-        ("slo_violation_rate", "Нарушения SLO (>500 мс)", "% запросов", True),
+        ("rps_mean", "Пропускная способность", "запросов/с", False),
+        ("p95_mean", "Хвостовая задержка p95", "мс", True),
+        ("slo_mean", "Нарушения SLO (>500 мс)", "% запросов", True),
     ]
 
     width = 0.13
@@ -54,8 +54,10 @@ def main() -> None:
         for i, policy in enumerate(policies):
             values = [results[policy][str(c)][key] for c in levels]
             positions = [x + (i - len(policies) / 2) * width for x in range(len(levels))]
+            errs = ([results[policy][str(c)].get("rps_std", 0) for c in levels]
+                    if key == "rps_mean" else None)
             ax.bar(positions, values, width, label=LABELS[policy],
-                   color=COLORS[policy])
+                   color=COLORS[policy], yerr=errs, capsize=3)
         ax.set_title(title + ("  (меньше лучше)" if lower_better else "  (больше лучше)"))
         ax.set_xticks(range(len(levels)))
         ax.set_xticklabels([f"конкурентность {c}" for c in levels])
