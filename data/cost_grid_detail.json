@@ -1,0 +1,338 @@
+{
+  "/api/user/profile": {
+    "sync": [
+      {
+        "param": 10,
+        "own_ms": 16.9,
+        "damage_ms": 11.5
+      },
+      {
+        "param": 25,
+        "own_ms": 19.8,
+        "damage_ms": 13.3
+      },
+      {
+        "param": 50,
+        "own_ms": 26.9,
+        "damage_ms": 14.9
+      },
+      {
+        "param": 100,
+        "own_ms": 36.3,
+        "damage_ms": 10.9
+      },
+      {
+        "param": 200,
+        "own_ms": 60.1,
+        "damage_ms": 12.9
+      },
+      {
+        "param": 400,
+        "own_ms": 111.9,
+        "damage_ms": 14.7
+      }
+    ],
+    "async": [
+      {
+        "param": 10,
+        "own_ms": 12.9,
+        "damage_ms": 9.5
+      },
+      {
+        "param": 25,
+        "own_ms": 17.5,
+        "damage_ms": 11.3
+      },
+      {
+        "param": 50,
+        "own_ms": 23.3,
+        "damage_ms": 13.2
+      },
+      {
+        "param": 100,
+        "own_ms": 34.4,
+        "damage_ms": 14.6
+      },
+      {
+        "param": 200,
+        "own_ms": 58.6,
+        "damage_ms": 12.3
+      },
+      {
+        "param": 400,
+        "own_ms": 109.2,
+        "damage_ms": 19.2
+      }
+    ]
+  },
+  "/api/feed": {
+    "sync": [
+      {
+        "param": 20,
+        "own_ms": 35.5,
+        "damage_ms": 9.0
+      },
+      {
+        "param": 50,
+        "own_ms": 72.3,
+        "damage_ms": 17.2
+      },
+      {
+        "param": 100,
+        "own_ms": 131.0,
+        "damage_ms": 13.4
+      },
+      {
+        "param": 200,
+        "own_ms": 253.7,
+        "damage_ms": 15.3
+      },
+      {
+        "param": 400,
+        "own_ms": 492.9,
+        "damage_ms": 17.4
+      }
+    ],
+    "async": [
+      {
+        "param": 20,
+        "own_ms": 31.3,
+        "damage_ms": 11.3
+      },
+      {
+        "param": 50,
+        "own_ms": 69.9,
+        "damage_ms": 20.5
+      },
+      {
+        "param": 100,
+        "own_ms": 128.7,
+        "damage_ms": 30.8
+      },
+      {
+        "param": 200,
+        "own_ms": 248.1,
+        "damage_ms": 29.0
+      },
+      {
+        "param": 400,
+        "own_ms": 491.1,
+        "damage_ms": 45.8
+      }
+    ]
+  },
+  "/api/auth/verify": {
+    "sync": [
+      {
+        "param": 1,
+        "own_ms": 128.8,
+        "damage_ms": 18.0
+      }
+    ],
+    "async": [
+      {
+        "param": 1,
+        "own_ms": 122.6,
+        "damage_ms": 120.7
+      }
+    ]
+  },
+  "/api/image/thumbnail": {
+    "sync": [
+      {
+        "param": 400,
+        "own_ms": 13.7,
+        "damage_ms": 10.4
+      },
+      {
+        "param": 700,
+        "own_ms": 37.7,
+        "damage_ms": 31.3
+      },
+      {
+        "param": 1000,
+        "own_ms": 64.4,
+        "damage_ms": 52.1
+      },
+      {
+        "param": 1400,
+        "own_ms": 103.1,
+        "damage_ms": 85.1
+      },
+      {
+        "param": 1800,
+        "own_ms": 171.4,
+        "damage_ms": 145.2
+      },
+      {
+        "param": 2200,
+        "own_ms": 248.5,
+        "damage_ms": 215.4
+      }
+    ],
+    "async": [
+      {
+        "param": 400,
+        "own_ms": 15.6,
+        "damage_ms": 14.2
+      },
+      {
+        "param": 700,
+        "own_ms": 29.8,
+        "damage_ms": 28.6
+      },
+      {
+        "param": 1000,
+        "own_ms": 56.6,
+        "damage_ms": 54.4
+      },
+      {
+        "param": 1400,
+        "own_ms": 99.1,
+        "damage_ms": 97.2
+      },
+      {
+        "param": 1800,
+        "own_ms": 154.2,
+        "damage_ms": 151.9
+      },
+      {
+        "param": 2200,
+        "own_ms": 241.0,
+        "damage_ms": 238.5
+      }
+    ]
+  },
+  "/api/search": {
+    "sync": [
+      {
+        "param": 10,
+        "own_ms": 24.2,
+        "damage_ms": 16.4
+      },
+      {
+        "param": 30,
+        "own_ms": 39.1,
+        "damage_ms": 24.9
+      },
+      {
+        "param": 60,
+        "own_ms": 63.9,
+        "damage_ms": 38.4
+      },
+      {
+        "param": 100,
+        "own_ms": 102.3,
+        "damage_ms": 64.8
+      },
+      {
+        "param": 250,
+        "own_ms": 253.1,
+        "damage_ms": 160.4
+      },
+      {
+        "param": 600,
+        "own_ms": 646.3,
+        "damage_ms": 429.7
+      }
+    ],
+    "async": [
+      {
+        "param": 10,
+        "own_ms": 24.1,
+        "damage_ms": 18.4
+      },
+      {
+        "param": 30,
+        "own_ms": 35.3,
+        "damage_ms": 25.3
+      },
+      {
+        "param": 60,
+        "own_ms": 61.5,
+        "damage_ms": 38.8
+      },
+      {
+        "param": 100,
+        "own_ms": 101.5,
+        "damage_ms": 66.3
+      },
+      {
+        "param": 250,
+        "own_ms": 249.7,
+        "damage_ms": 160.9
+      },
+      {
+        "param": 600,
+        "own_ms": 660.6,
+        "damage_ms": 499.9
+      }
+    ]
+  },
+  "/api/report/generate": {
+    "sync": [
+      {
+        "param": 8,
+        "own_ms": 25.7,
+        "damage_ms": 13.5
+      },
+      {
+        "param": 15,
+        "own_ms": 47.6,
+        "damage_ms": 17.2
+      },
+      {
+        "param": 30,
+        "own_ms": 149.3,
+        "damage_ms": 47.0
+      },
+      {
+        "param": 45,
+        "own_ms": 330.8,
+        "damage_ms": 95.1
+      },
+      {
+        "param": 60,
+        "own_ms": 598.8,
+        "damage_ms": 183.9
+      },
+      {
+        "param": 75,
+        "own_ms": 937.7,
+        "damage_ms": 296.3
+      }
+    ],
+    "async": [
+      {
+        "param": 8,
+        "own_ms": 20.8,
+        "damage_ms": 13.8
+      },
+      {
+        "param": 15,
+        "own_ms": 44.1,
+        "damage_ms": 32.6
+      },
+      {
+        "param": 30,
+        "own_ms": 151.3,
+        "damage_ms": 113.1
+      },
+      {
+        "param": 45,
+        "own_ms": 336.4,
+        "damage_ms": 249.7
+      },
+      {
+        "param": 60,
+        "own_ms": 590.4,
+        "damage_ms": 430.2
+      },
+      {
+        "param": 75,
+        "own_ms": 945.0,
+        "damage_ms": 682.6
+      }
+    ]
+  }
+}

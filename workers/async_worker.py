@@ -47,7 +47,7 @@ async def shutdown():
 async def process(request: Request):
     payload = await request.json()
     endpoint = payload.get("endpoint")
-    result = await run_async(endpoint, client)
+    result = await run_async(endpoint, client, payload.get("param"))
     result["worker"] = WORKER_NAME
     return JSONResponse(result)
 

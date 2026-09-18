@@ -63,7 +63,8 @@ async def process(request: Request):
     endpoint = payload.get("endpoint")
     loop = asyncio.get_running_loop()
     async with capacity_sem:
-        result = await loop.run_in_executor(executor, run_sync, endpoint)
+        result = await loop.run_in_executor(executor, run_sync, endpoint,
+                                            payload.get("param"))
     result["worker"] = WORKER_NAME
     return JSONResponse(result)
 

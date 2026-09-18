@@ -25,7 +25,7 @@ WORKER_NAME = "sync"
 def process():
     payload = request.get_json(silent=True) or {}
     endpoint = payload.get("endpoint")
-    result = run_sync(endpoint)
+    result = run_sync(endpoint, payload.get("param"))
     result["worker"] = WORKER_NAME
     return jsonify(result)
 

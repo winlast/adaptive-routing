@@ -1,41 +1,44 @@
 """
-Учёт содержимого очередей воркеров, а не только их длины.
+Учёт содержимого очередей движков, а не только их длины.
 
-Least-connections и первая версия нашей модели опираются на одно число —
-сколько запросов сейчас висит на воркере. Но пять лёгких обращений к
-внешнему сервису и пять тяжёлых вычислений дают одинаковую пятёрку, хотя
-воркер освободится в первом случае через десятки миллисекунд, а во втором
-через секунду. Эта потеря информации и есть слабое место обеих политик.
+Least-connections опирается на одно число — сколько запросов сейчас
+обрабатывает движок. Но пять обращений по 10 мс и пять по 900 мс дают
+одинаковую пятёрку, хотя движок освободится в первом случае через
+десятки миллисекунд, а во втором почти через пять секунд. Эта потеря
+информации и есть слабое место счётчика соединений.
 
-Здесь шлюз отслеживает, какие именно запросы сейчас выполняются на каждом
-воркере, и оценивает оставшийся объём работы: для каждого запроса берётся
-его ожидаемая стоимость на этом воркере и вычитается уже отработанное
-время. Сумма по всем активным запросам даёт ожидаемое время освобождения
-воркера — величину, которой у least-connections нет по построению.
+Здесь шлюз помнит, какие именно запросы сейчас выполняются на каждом
+движке, и оценивает оставшуюся занятость: для каждого запроса берётся
+его ожидаемая занятость и вычитается уже отработанное время. Сумма даёт
+ожидаемое время освобождения движка.
+
+Важно, что оценка занятости берётся из того же источника, что и у
+политики. Благодаря этому сравнение политик остаётся сравнением
+источников оценки: политика с грубой оценкой одинаково грубо и
+взвешивает очередь, и оценивает новый запрос — ровно так, как это
+произошло бы в реальной системе.
 """
 from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class ActiveRequest:
     endpoint: str
+    param: float | None
     started_at: float
     expected_ms: float
 
 
 class QueueTracker:
-    """Потокобезопасный учёт активных запросов по воркерам."""
+    """Потокобезопасный учёт активных запросов по движкам."""
 
-    def __init__(self, workers: tuple[str, ...],
-                 cost_table: dict[str, dict[str, float]] | None = None,
-                 default_cost_ms: float = 150.0):
+    def __init__(self, workers: tuple[str, ...], estimator):
         self._workers = workers
-        self._cost_table = cost_table or {}
-        self._default_cost = default_cost_ms
+        self._estimator = estimator
         self._active: dict[str, dict[int, ActiveRequest]] = {
             w: {} for w in workers
         }
@@ -43,23 +46,15 @@ class QueueTracker:
         self._counter = 0
         self._recent_latency: dict[str, float] = {}
 
-    def expected_cost(self, endpoint: str, worker: str) -> float:
-        """Ожидаемая стоимость запроса на воркере по таблице замеров."""
-        row = self._cost_table.get(endpoint)
-        if not row:
-            return self._default_cost
-        value = row.get(worker)
-        return float(value) if value is not None else self._default_cost
-
-    def add(self, worker: str, endpoint: str) -> int:
+    def add(self, worker: str, endpoint: str, param: float | None) -> int:
         """Регистрирует начало обработки, возвращает идентификатор записи."""
+        expected = self._estimator.cost(endpoint, param, worker)
         with self._lock:
             self._counter += 1
             token = self._counter
             self._active[worker][token] = ActiveRequest(
-                endpoint=endpoint,
-                started_at=time.perf_counter(),
-                expected_ms=self.expected_cost(endpoint, worker),
+                endpoint=endpoint, param=param,
+                started_at=time.perf_counter(), expected_ms=expected,
             )
             return token
 
@@ -74,12 +69,12 @@ class QueueTracker:
 
     def pending_work(self) -> dict[str, float]:
         """
-        Оценка оставшейся работы на каждом воркере в миллисекундах.
+        Оценка оставшейся занятости каждого движка в миллисекундах.
 
-        Из ожидаемой стоимости каждого активного запроса вычитается уже
-        прошедшее время: запрос, который выполняется почти секунду из
-        ожидаемых 900 мс, скоро освободит воркер и не должен считаться
-        так же, как только что поступивший.
+        Из ожидаемой занятости каждого активного запроса вычитается уже
+        прошедшее время: запрос, отработавший почти всю свою длительность,
+        скоро освободит движок и не должен весить столько же, сколько
+        только что поступивший.
         """
         now = time.perf_counter()
         with self._lock:
@@ -92,16 +87,9 @@ class QueueTracker:
                 result[worker] = total
             return result
 
-    def observe_latency(self, worker: str, endpoint: str,
-                        latency_ms: float, alpha: float = 0.2) -> None:
-        """
-        Запоминает фактическую скорость ответа воркера.
-
-        Таблица стоимостей отражает то, каким воркер был на момент
-        замера. Эта оценка отражает то, каким он стал: если процессов
-        стало меньше или рядом появился шумный сосед, разница проявится
-        здесь в течение нескольких запросов.
-        """
+    def observe_latency(self, worker: str, latency_ms: float,
+                        alpha: float = 0.2) -> None:
+        """Скользящая оценка фактической скорости ответа движка."""
         with self._lock:
             previous = self._recent_latency.get(worker)
             self._recent_latency[worker] = (
@@ -114,5 +102,5 @@ class QueueTracker:
             return {w: self._recent_latency.get(w, 0.0) for w in self._workers}
 
     def snapshot(self) -> tuple[dict[str, int], dict[str, float]]:
-        """Согласованный снимок длин очередей и объёма работы в них."""
+        """Согласованный снимок длин очередей и занятости движков."""
         return self.counts(), self.pending_work()
