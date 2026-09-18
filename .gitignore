@@ -21,3 +21,9 @@ data/heatmap_generation_log.csv
 # Личные административные документы (заявки на экспертизу, заключения) —
 # не для публичного репозитория
 docs/Заявки и заключения/
+
+# Генерируемые артефакты экспериментов
+data/workload.db
+data/requests_log.csv
+data/benchmark_requests_log.csv
+*:Zone.Identifier

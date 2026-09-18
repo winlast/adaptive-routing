@@ -1,0 +1,17 @@
+{
+  "features": [
+    "endpoint=/api/user/profile",
+    "endpoint=/api/feed",
+    "endpoint=/api/auth/verify",
+    "endpoint=/api/image/thumbnail",
+    "endpoint=/api/search",
+    "endpoint=/api/report/generate",
+    "payload_bytes",
+    "inflight_sync",
+    "inflight_async",
+    "inflight_process",
+    "worker=sync",
+    "worker=async",
+    "worker=process"
+  ]
+}

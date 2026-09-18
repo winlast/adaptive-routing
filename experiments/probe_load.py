@@ -88,6 +88,20 @@ async def main() -> None:
               f"p95 {res['p95']:>7} мс | ошибок {res['errors']} | {res['done']}")
         await asyncio.sleep(2)
 
+    # Таблица стоимостей под нагрузкой. Именно она даёт честный, сильный
+    # статический baseline: эксперт профилирует систему в рабочем режиме,
+    # а не по одиночным запросам, где воркеры почти неразличимы.
+    import json
+    cost_table = {
+        ep: {r["worker"]: r["per_endpoint"].get(ep) for r in results
+             if r["per_endpoint"].get(ep) is not None}
+        for ep in ENDPOINT_NAMES
+    }
+    out = Path(__file__).resolve().parent.parent / "data" / "cost_table.json"
+    out.write_text(json.dumps(cost_table, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    print(f"\nТаблица стоимостей под нагрузкой сохранена: {out}")
+
     print("\nМедиана по эндпоинтам (мс):")
     header = f"{'endpoint':<26}" + "".join(f"{r['worker']:>10}" for r in results)
     print(header)

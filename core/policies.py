@@ -1,0 +1,178 @@
+"""
+Политики маршрутизации: от тривиальных базовых до обучаемой.
+
+Все политики реализуют один интерфейс и получают одни и те же входные
+данные — то, что реально доступно шлюзу в момент решения, до того как
+запрос обработан:
+
+  * эндпоинт и HTTP-метод,
+  * размер тела запроса,
+  * сколько запросов сейчас отправлено каждому воркеру и ещё не завершено
+    (in-flight — прокси знает это без всякой кооперации с воркерами).
+
+Намеренно недоступно: фактическая длительность запроса и его «тип»
+(I/O-bound или CPU-bound). В предыдущей версии прототипа тип приходил в
+теле запроса явным числом, из-за чего задача классификации вырождалась в
+сравнение с порогом. Здесь политика обязана вывести полезность воркера
+из косвенных признаков — либо не выводить вовсе, если она базовая.
+
+Набор базовых политик подобран так, чтобы обучаемой политике было с чем
+честно конкурировать: round-robin и least-connections — то, что реально
+используется в промышленных балансировщиках, статическое правило —
+сильный экспертный baseline, oracle — верхняя граница достижимого.
+"""
+from __future__ import annotations
+
+import itertools
+import random
+from dataclasses import dataclass, field
+
+WORKERS = ("sync", "async", "process")
+
+
+@dataclass
+class RequestFeatures:
+    """Всё, что известно шлюзу о запросе в момент принятия решения."""
+
+    endpoint: str
+    method: str
+    payload_bytes: int
+    inflight: dict[str, int] = field(default_factory=dict)
+
+    def inflight_vector(self) -> list[int]:
+        return [self.inflight.get(w, 0) for w in WORKERS]
+
+
+class Policy:
+    """Базовый интерфейс политики маршрутизации."""
+
+    name = "base"
+
+    def choose(self, features: RequestFeatures) -> str:
+        raise NotImplementedError
+
+    def observe(self, features: RequestFeatures, worker: str, latency_ms: float) -> None:
+        """Обратная связь по завершённому запросу. По умолчанию не нужна."""
+        return None
+
+
+class RandomPolicy(Policy):
+    """Случайный выбор. Нужен и как baseline, и для сбора обучающих данных."""
+
+    name = "random"
+
+    def __init__(self, seed: int = 0):
+        self._rng = random.Random(seed)
+
+    def choose(self, features: RequestFeatures) -> str:
+        return self._rng.choice(WORKERS)
+
+
+class RoundRobinPolicy(Policy):
+    """Классический round-robin: по очереди, не глядя на запрос."""
+
+    name = "round_robin"
+
+    def __init__(self):
+        self._cycle = itertools.cycle(WORKERS)
+
+    def choose(self, features: RequestFeatures) -> str:
+        return next(self._cycle)
+
+
+class LeastConnectionsPolicy(Policy):
+    """
+    Least-connections: запрос уходит наименее загруженному воркеру.
+
+    Самый сильный из «слепых» промышленных балансировщиков: он учитывает
+    загрузку, но по-прежнему ничего не знает о характере запроса, поэтому
+    не отличает вычислительную задачу от ожидания ввода-вывода.
+    """
+
+    name = "least_conn"
+
+    def choose(self, features: RequestFeatures) -> str:
+        inflight = features.inflight
+        return min(WORKERS, key=lambda w: inflight.get(w, 0))
+
+
+class StaticRulePolicy(Policy):
+    """
+    Экспертное правило: фиксированное отображение эндпоинта на воркер.
+
+    Составляется человеком по результатам профилирования и не меняется во
+    время работы. Это главный конкурент обучаемой политики: если она не
+    выигрывает у грамотно составленной статики, ML в этой задаче не нужен,
+    и об этом следует сказать прямо.
+    """
+
+    name = "static_rule"
+
+    def __init__(self, mapping: dict[str, str], default: str = "sync"):
+        self.mapping = mapping
+        self.default = default
+
+    def choose(self, features: RequestFeatures) -> str:
+        return self.mapping.get(features.endpoint, self.default)
+
+
+class OraclePolicy(Policy):
+    """
+    Оракул: знает заранее измеренную стоимость эндпоинта на каждом воркере
+    и добавляет к ней штраф за текущую очередь.
+
+    Физически нереализуем в проде (требует знания будущего), поэтому
+    служит верхней границей: показывает, сколько вообще можно выжать из
+    маршрутизации, и тем самым задаёт масштаб для остальных политик.
+    """
+
+    name = "oracle"
+
+    def __init__(self, cost_table: dict[str, dict[str, float]],
+                 queue_penalty: float = 1.0):
+        self.cost_table = cost_table
+        self.queue_penalty = queue_penalty
+
+    def choose(self, features: RequestFeatures) -> str:
+        costs = self.cost_table.get(features.endpoint)
+        if not costs:
+            return "sync"
+        inflight = features.inflight
+
+        def expected(worker: str) -> float:
+            base = costs.get(worker, float("inf"))
+            return base * (1 + self.queue_penalty * inflight.get(worker, 0))
+
+        return min(WORKERS, key=expected)
+
+
+class ModelPolicy(Policy):
+    """
+    Обучаемая политика: предсказывает латентность запроса на каждом
+    воркере и выбирает наименьшую.
+
+    В отличие от классификации «тип запроса», здесь модель решает
+    регрессионную задачу на фактически измеренных длительностях, причём
+    на вход ей подаётся и текущее состояние очередей. Поэтому её решение
+    может меняться для одного и того же эндпоинта в зависимости от
+    загрузки — чего статическое правило по построению не умеет.
+    """
+
+    name = "model"
+
+    def __init__(self, predictor):
+        self.predictor = predictor
+
+    def choose(self, features: RequestFeatures) -> str:
+        predictions = self.predictor.predict_all_workers(features)
+        return min(predictions, key=predictions.get)
+
+
+def build_static_rule_from_costs(cost_table: dict[str, dict[str, float]]
+                                 ) -> StaticRulePolicy:
+    """Строит экспертное правило, выбирая лучший воркер по таблице замеров."""
+    mapping = {
+        endpoint: min(costs, key=costs.get)
+        for endpoint, costs in cost_table.items()
+    }
+    return StaticRulePolicy(mapping)
