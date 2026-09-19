@@ -1,0 +1,164 @@
+{
+  "/api/user/profile": [
+    {
+      "param": 10,
+      "total_ms": 5.0,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 25,
+      "total_ms": 7.9,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 50,
+      "total_ms": 14.9,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 100,
+      "total_ms": 30.5,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 200,
+      "total_ms": 55.2,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 400,
+      "total_ms": 106.9,
+      "cpu_ms": 0.0
+    }
+  ],
+  "/api/feed": [
+    {
+      "param": 20,
+      "total_ms": 30.0,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 50,
+      "total_ms": 65.5,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 100,
+      "total_ms": 126.9,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 200,
+      "total_ms": 244.4,
+      "cpu_ms": 0.0
+    },
+    {
+      "param": 400,
+      "total_ms": 485.2,
+      "cpu_ms": 0.0
+    }
+  ],
+  "/api/auth/verify": [
+    {
+      "param": null,
+      "total_ms": 111.0,
+      "cpu_ms": 111.9
+    }
+  ],
+  "/api/image/thumbnail": [
+    {
+      "param": 400,
+      "total_ms": 6.7,
+      "cpu_ms": 6.6
+    },
+    {
+      "param": 700,
+      "total_ms": 21.1,
+      "cpu_ms": 21.6
+    },
+    {
+      "param": 1000,
+      "total_ms": 42.6,
+      "cpu_ms": 42.2
+    },
+    {
+      "param": 1400,
+      "total_ms": 86.5,
+      "cpu_ms": 84.2
+    },
+    {
+      "param": 1800,
+      "total_ms": 140.7,
+      "cpu_ms": 138.7
+    },
+    {
+      "param": 2200,
+      "total_ms": 217.8,
+      "cpu_ms": 217.9
+    }
+  ],
+  "/api/search": [
+    {
+      "param": 10,
+      "total_ms": 10.5,
+      "cpu_ms": 4.2
+    },
+    {
+      "param": 30,
+      "total_ms": 27.0,
+      "cpu_ms": 12.5
+    },
+    {
+      "param": 60,
+      "total_ms": 53.5,
+      "cpu_ms": 28.4
+    },
+    {
+      "param": 100,
+      "total_ms": 94.5,
+      "cpu_ms": 51.0
+    },
+    {
+      "param": 250,
+      "total_ms": 248.6,
+      "cpu_ms": 148.5
+    },
+    {
+      "param": 600,
+      "total_ms": 640.2,
+      "cpu_ms": 433.2
+    }
+  ],
+  "/api/report/generate": [
+    {
+      "param": 8,
+      "total_ms": 10.9,
+      "cpu_ms": 5.8
+    },
+    {
+      "param": 15,
+      "total_ms": 34.3,
+      "cpu_ms": 21.7
+    },
+    {
+      "param": 30,
+      "total_ms": 140.8,
+      "cpu_ms": 88.4
+    },
+    {
+      "param": 45,
+      "total_ms": 322.9,
+      "cpu_ms": 208.0
+    },
+    {
+      "param": 60,
+      "total_ms": 595.9,
+      "cpu_ms": 400.8
+    },
+    {
+      "param": 75,
+      "total_ms": 921.4,
+      "cpu_ms": 627.8
+    }
+  ]
+}
