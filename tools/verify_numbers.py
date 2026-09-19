@@ -40,6 +40,13 @@ def check(label: str, claim, actual, tol: float = 0.03) -> None:
         problems.append(f"{label}: в статье {claim}, в данных {actual}")
 
 
+def deck_text(path: Path) -> str:
+    from pptx import Presentation
+    prs = Presentation(str(path))
+    return "\n".join(sh.text_frame.text for slide in prs.slides
+                     for sh in slide.shapes if sh.has_text_frame)
+
+
 def article_text(path: Path) -> str:
     with zipfile.ZipFile(path) as z:
         xml = z.read("word/document.xml").decode("utf-8")
@@ -141,6 +148,14 @@ def main() -> int:
                 problems.append(f"{path.name}: встречается устаревшее «{b}»")
         if legacy_abstract and "39–87" not in text:
             problems.append(f"{path.name}: исходная аннотация утрачена")
+
+    for path in sorted(BASE.glob("docs/*.pptx")):
+        if path.name.startswith("~$"):
+            continue
+        text = deck_text(path)
+        for b in banned_all + banned_new:
+            if b in text:
+                problems.append(f"{path.name}: встречается устаревшее «{b}»")
 
     print(f"Сверено утверждений: {checked}")
     if problems:
