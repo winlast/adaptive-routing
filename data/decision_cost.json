@@ -1,0 +1,17 @@
+{
+  "linear_param": {
+    "title": "экспертное правило",
+    "microseconds": 1.35,
+    "decisions_per_second": 741033
+  },
+  "power_law": {
+    "title": "степенной закон",
+    "microseconds": 1.56,
+    "decisions_per_second": 642168
+  },
+  "neural": {
+    "title": "нейронная сеть",
+    "microseconds": 165.51,
+    "decisions_per_second": 6042
+  }
+}
