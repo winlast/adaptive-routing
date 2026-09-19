@@ -122,14 +122,25 @@ def main() -> int:
     check("обучающая выборка", 384, len(load("cost_samples.json")))
     check("отложенная выборка", 156, len(load("cost_samples_holdout.json")))
 
-    # Числа, которых в тексте быть не должно
-    banned = ["39–87", "39-87", "99,7", "99.7", "6,1 раза", "658", "123 мс",
-              "65 раз", "174 мкс"]
+    # Числа, которых в тексте быть не должно.
+    #
+    # Версия статьи с исходной аннотацией — особый случай: числа
+    # предварительной серии в ней присутствуют намеренно, потому что
+    # аннотацию изменить не удалось, и текст обязан объяснить, откуда
+    # расхождение. Остальные устаревшие величины запрещены и там.
+    banned_all = ["99,7", "99.7", "6,1 раза", "658", "123 мс", "65 раз",
+                  "174 мкс"]
+    banned_new = ["39–87", "39-87", "1,8–2,4"]
     for path in sorted(BASE.glob("docs/*.docx")):
+        if path.name.startswith("~$"):
+            continue
         text = article_text(path)
-        for b in banned:
+        legacy_abstract = "v1" in path.name
+        for b in banned_all + ([] if legacy_abstract else banned_new):
             if b in text:
                 problems.append(f"{path.name}: встречается устаревшее «{b}»")
+        if legacy_abstract and "39–87" not in text:
+            problems.append(f"{path.name}: исходная аннотация утрачена")
 
     print(f"Сверено утверждений: {checked}")
     if problems:

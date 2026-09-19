@@ -29,3 +29,6 @@ data/benchmark_requests_log.csv
 
 # NTFS-метки Windows
 *:Zone.Identifier
+
+# Временные файлы Word (документ открыт)
+~$*
