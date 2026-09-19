@@ -17,7 +17,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent.parent
+BASE = Path(__file__).resolve().parent.parent
 SRC = BASE / "data" / "requests_log.csv"
 OUT = Path(__file__).resolve().parent / "demo_access.log"
 
