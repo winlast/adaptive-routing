@@ -96,18 +96,28 @@ async def measure(policy: str) -> dict:
     # Устойчивее процентиля: оценивается по всей объединённой выборке,
     # тогда как 99-й процентиль на четырёх сотнях наблюдений опирается
     # на единицы значений и скачет от прогона к прогону.
-    light_slow = sum(1 for v in light if v > LIGHT_BUDGET_MS) / len(light) * 100
+    # На однородном потоке лёгких обращений может не быть вовсе —
+    # тогда показатель не определён, а не равен нулю.
+    light_slow = (sum(1 for v in light if v > LIGHT_BUDGET_MS) / len(light)
+                  * 100) if light else None
 
     return {
-        "light_over_budget_pct": round(light_slow, 1),
+        "light_over_budget_pct": (round(light_slow, 1)
+                                  if light_slow is not None else None),
         "rps": round(statistics.mean(r["rps"] for r in runs), 2),
+        # Средняя задержка по объединённой выборке всех повторов.
+        # Нужна потому, что именно ею обычно описывают выигрыш, хотя
+        # при замкнутой схеме нагрузки она жёстко связана с пропускной
+        # способностью и сама по себе нового не сообщает.
+        "avg": round(statistics.mean(everything), 1),
+        "median": round(pct(everything, 0.50), 1),
         "rps_std": round(statistics.stdev(r["rps"] for r in runs), 2)
         if len(runs) > 1 else 0.0,
         "p95": round(pct(everything, 0.95), 1),
         "p99": round(pct(everything, 0.99), 1),
-        "light_p95": round(pct(light, 0.95), 1),
-        "light_p99": round(pct(light, 0.99), 1),
-        "light_median": round(pct(light, 0.50), 1),
+        "light_p95": round(pct(light, 0.95), 1) if light else None,
+        "light_p99": round(pct(light, 0.99), 1) if light else None,
+        "light_median": round(pct(light, 0.50), 1) if light else None,
         "slo": round(statistics.mean(r["slo_violation_rate"] for r in runs), 1),
         "n_light": len(light),
     }

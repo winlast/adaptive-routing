@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import statistics
 import sys
@@ -34,15 +35,41 @@ from core.workload import ENDPOINTS, sample_param
 
 GATEWAY_URL = "http://127.0.0.1:8300/route"
 
-# Доли запросов по маршрутам. Лёгкие обращения преобладают.
-TRAFFIC_MIX = {
-    "/api/user/profile": 0.35,
-    "/api/feed": 0.20,
-    "/api/search": 0.20,
-    "/api/auth/verify": 0.10,
-    "/api/report/generate": 0.10,
-    "/api/image/thumbnail": 0.05,
+# Составы потока запросов.
+#
+# `mixed` — разнородный поток: лёгкие обращения преобладают, тяжёлые
+# редки. Так устроен реальный веб-трафик, и именно на нём маршрутизация
+# имеет смысл.
+#
+# Остальные составы однородны и служат контролем. Утверждение «на
+# однородной нагрузке выигрыша нет» должно быть проверено, а не принято
+# на веру: если поток состоит из запросов одного характера, у движков
+# нет повода различаться, и распределять по ним нечего. Если выигрыш
+# всё же обнаружится, это будет означать, что эффект объясняется не тем,
+# чем мы думаем.
+TRAFFIC_MIXES = {
+    "mixed": {
+        "/api/user/profile": 0.35,
+        "/api/feed": 0.20,
+        "/api/search": 0.20,
+        "/api/auth/verify": 0.10,
+        "/api/report/generate": 0.10,
+        "/api/image/thumbnail": 0.05,
+    },
+    # Только ожидание внешнего сервиса: вычислений почти нет, блокировать
+    # event loop нечем.
+    "io_only": {
+        "/api/user/profile": 0.5,
+        "/api/feed": 0.5,
+    },
+    # Только вычисления фиксированной стоимости: различать запросы между
+    # собой не по чему.
+    "cpu_only": {
+        "/api/auth/verify": 1.0,
+    },
 }
+
+TRAFFIC_MIX = TRAFFIC_MIXES[os.environ.get("TRAFFIC", "mixed")]
 
 # Маршрут, по которому отслеживается страдание лёгких запросов.
 LIGHT_ENDPOINT = "/api/user/profile"
