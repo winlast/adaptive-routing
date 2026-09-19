@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoadLens — отчёт</title><style>
+:root { --ink:#1a2027; --muted:#5b6b7a; --line:#dde3e9; --accent:#1565c0;
+        --warn:#c62828; --ok:#2e7d32; --bg:#fff; --card:#f7f9fb; }
+@media (prefers-color-scheme: dark) { :root { --ink:#e6edf3; --muted:#9aa7b4;
+  --line:#2a3542; --bg:#0f141a; --card:#161d26; } }
+* { box-sizing:border-box }
+body { margin:0; padding:32px 16px; background:var(--bg); color:var(--ink);
+  font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif }
+.wrap { max-width:960px; margin:0 auto }
+h1 { font-size:26px; margin:0 0 4px }
+.sub { color:var(--muted); margin:0 0 28px }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:14px; margin-bottom:32px }
+.card { background:var(--card); border:1px solid var(--line);
+  border-radius:12px; padding:16px }
+.card .n { font-size:30px; font-weight:650; letter-spacing:-.02em }
+.card .l { color:var(--muted); font-size:13px; margin-top:4px }
+h2 { font-size:18px; margin:32px 0 10px }
+table { width:100%; border-collapse:collapse; font-size:14px }
+th,td { text-align:right; padding:9px 10px; border-bottom:1px solid var(--line) }
+th:first-child,td:first-child { text-align:left; font-family:ui-monospace,
+  SFMono-Regular,Menlo,monospace; font-size:13px }
+th { color:var(--muted); font-weight:600; font-size:12px;
+  text-transform:uppercase; letter-spacing:.04em }
+.big { color:var(--warn); font-weight:650 }
+.good { color:var(--ok); font-weight:650 }
+.note { background:var(--card); border-left:3px solid var(--accent);
+  border-radius:0 8px 8px 0; padding:14px 16px; margin:24px 0;
+  color:var(--muted); font-size:14px }
+footer { margin-top:40px; padding-top:16px; border-top:1px solid var(--line);
+  color:var(--muted); font-size:13px }
+</style></head><body><div class="wrap">
+<h1>Что скрыто от балансировщика</h1>
+<p class="sub">Разобрано 1 200 обращений по 6 маршрутам</p>
+<div class="cards">
+  <div class="card"><div class="n big">14x</div>
+    <div class="l">разброс стоимости внутри одного маршрута</div></div>
+  <div class="card"><div class="n big">56%</div>
+    <div class="l">ошибка оценки по маршруту</div></div>
+  <div class="card"><div class="n good">32%</div>
+    <div class="l">ошибка оценки по параметрам запроса</div></div>
+  <div class="card"><div class="n">39%</div>
+    <div class="l">времени занимают 10% обращений</div></div>
+</div>
+<div class="note">Внутри маршрута <b>/api/image/thumbnail</b> стоимость запросов различается в 14 раз. Балансировщик считает эти обращения одинаковыми: вес задаётся на маршрут, а различие лежит внутри него. Разброс при этом предсказуем — он объясняется параметром <b>size</b> на 99&nbsp;%.</div>
+<h2>Разброс внутри маршрутов</h2>
+<table><thead><tr><th>Маршрут</th><th>Обращений</th><th>Доля времени</th>
+<th>p50, мс</th><th>p99, мс</th><th>Разброс</th></tr></thead>
+<tbody><tr><td>/api/search</td><td>246</td><td>29.9%</td><td>306</td><td>2624</td><td class="big">9x</td></tr><tr><td>/api/feed</td><td>243</td><td>26.4%</td><td>382</td><td>1746</td><td class="">5x</td></tr><tr><td>/api/user/profile</td><td>411</td><td>19.8%</td><td>104</td><td>1042</td><td class="big">10x</td></tr><tr><td>/api/report/generate</td><td>127</td><td>17.2%</td><td>419</td><td>3171</td><td class="big">8x</td></tr><tr><td>/api/auth/verify</td><td>122</td><td>5.4%</td><td>149</td><td>530</td><td class="">4x</td></tr><tr><td>/api/image/thumbnail</td><td>51</td><td>1.3%</td><td>43</td><td>618</td><td class="big">14x</td></tr></tbody></table>
+<h2>Чем разброс объясняется</h2><p class="sub">Параметр виден прокси до обработки запроса — значит, стоимость предсказуема заранее.</p><table><thead><tr><th>Маршрут</th><th>Параметр</th><th>Зависимость</th><th>Объясняет</th><th>Ошибка оценки</th></tr></thead><tbody><tr><td>/api/search</td><td>limit</td><td>~ limit<sup>0.89</sup></td><td>83%</td><td>140% → <span class="good">38%</span></td></tr><tr><td>/api/feed</td><td>limit</td><td>~ limit<sup>0.77</sup></td><td>81%</td><td>61% → <span class="good">20%</span></td></tr><tr><td>/api/user/profile</td><td>limit</td><td>~ limit<sup>0.79</sup></td><td>82%</td><td>112% → <span class="good">27%</span></td></tr><tr><td>/api/report/generate</td><td>days</td><td>~ days<sup>1.98</sup></td><td>78%</td><td>113% → <span class="good">59%</span></td></tr><tr><td>/api/image/thumbnail</td><td>size</td><td>~ size<sup>1.91</sup></td><td>99%</td><td>128% → <span class="good">5%</span></td></tr></tbody></table>
+<footer>Отчёт построен по журналу обращений. Ошибка оценки — медианная относительная.</footer>
+</div></body></html>
