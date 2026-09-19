@@ -1,0 +1,77 @@
+{
+  "traffic": "io_only",
+  "levels": {
+    "32": {
+      "all_sync": {
+        "light_over_budget_pct": 16.3,
+        "rps": 81.28,
+        "avg": 308.9,
+        "median": 152.4,
+        "rps_std": 1.82,
+        "p95": 1249.8,
+        "p99": 2060.5,
+        "light_p95": 419.5,
+        "light_p99": 577.8,
+        "light_median": 51.8,
+        "slo": 17.3,
+        "n_light": 575
+      },
+      "all_async": {
+        "light_over_budget_pct": 0.0,
+        "rps": 231.8,
+        "avg": 81.3,
+        "median": 42.4,
+        "rps_std": 25.81,
+        "p95": 318.9,
+        "p99": 454.2,
+        "light_p95": 102.8,
+        "light_p99": 150.9,
+        "light_median": 16.2,
+        "slo": 0.1,
+        "n_light": 575
+      },
+      "least_conn": {
+        "light_over_budget_pct": 1.7,
+        "rps": 166.5,
+        "avg": 105.1,
+        "median": 45.3,
+        "rps_std": 19.65,
+        "p95": 399.3,
+        "p99": 855.6,
+        "light_p95": 108.4,
+        "light_p99": 272.3,
+        "light_median": 16.6,
+        "slo": 2.9,
+        "n_light": 575
+      },
+      "budget_neural_30": {
+        "light_over_budget_pct": 2.8,
+        "rps": 131.86,
+        "avg": 162.4,
+        "median": 44.9,
+        "rps_std": 3.19,
+        "p95": 864.1,
+        "p99": 1519.4,
+        "light_p95": 120.3,
+        "light_p99": 330.8,
+        "light_median": 18.1,
+        "slo": 9.9,
+        "n_light": 575
+      },
+      "budget_neural_60": {
+        "light_over_budget_pct": 1.6,
+        "rps": 121.71,
+        "avg": 172.1,
+        "median": 45.9,
+        "rps_std": 9.95,
+        "p95": 894.6,
+        "p99": 1635.7,
+        "light_p95": 106.9,
+        "light_p99": 260.3,
+        "light_median": 18.0,
+        "slo": 11.3,
+        "n_light": 575
+      }
+    }
+  }
+}

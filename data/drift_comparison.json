@@ -1,0 +1,82 @@
+{
+  "budget_neural_30": {
+    "title": "оценки неизменны",
+    "before": {
+      "rps": 37.58,
+      "avg": 62.3,
+      "p95": 204.1,
+      "slow_pct": 5.4
+    },
+    "after": {
+      "rps": 35.32,
+      "avg": 967.2,
+      "p95": 2474.0,
+      "slow_pct": 86.8
+    },
+    "rps_drop_pct": 6.0
+  },
+  "adabudget_neural_30": {
+    "title": "поправка по разности с очередью",
+    "before": {
+      "rps": 40.94,
+      "avg": 69.4,
+      "p95": 216.8,
+      "slow_pct": 6.4
+    },
+    "after": {
+      "rps": 29.97,
+      "avg": 615.6,
+      "p95": 1857.9,
+      "slow_pct": 65.8
+    },
+    "rps_drop_pct": 26.8
+  },
+  "health_neural_30": {
+    "title": "состояние движка, сравнение по блокировке",
+    "before": {
+      "rps": 42.12,
+      "avg": 85.4,
+      "p95": 292.7,
+      "slow_pct": 9.4
+    },
+    "after": {
+      "rps": 28.51,
+      "avg": 516.9,
+      "p95": 1554.4,
+      "slow_pct": 61.5
+    },
+    "rps_drop_pct": 32.3
+  },
+  "healthfull_neural_30": {
+    "title": "состояние движка, сравнение по полной цене",
+    "before": {
+      "rps": 40.8,
+      "avg": 79.1,
+      "p95": 272.3,
+      "slow_pct": 9.7
+    },
+    "after": {
+      "rps": 25.99,
+      "avg": 423.6,
+      "p95": 1546.3,
+      "slow_pct": 50.5
+    },
+    "rps_drop_pct": 36.3
+  },
+  "least_conn": {
+    "title": "least-connections (оценок нет)",
+    "before": {
+      "rps": 44.72,
+      "avg": 300.4,
+      "p95": 1070.6,
+      "slow_pct": 46.6
+    },
+    "after": {
+      "rps": 31.64,
+      "avg": 472.8,
+      "p95": 2452.7,
+      "slow_pct": 35.6
+    },
+    "rps_drop_pct": 29.2
+  }
+}

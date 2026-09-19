@@ -22,8 +22,10 @@ data/heatmap_generation_log.csv
 # не для публичного репозитория
 docs/Заявки и заключения/
 
-# Сгенерированная БД для нагрузочных операций
+# Генерируемые артефакты экспериментов
 data/workload.db
+data/requests_log.csv
+data/benchmark_requests_log.csv
 
 # NTFS-метки Windows
 *:Zone.Identifier

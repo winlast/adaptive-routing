@@ -1,0 +1,38 @@
+{
+  "budget_linear_20": {
+    "light_over_budget_pct": 7.5,
+    "rps": 33.7,
+    "rps_std": 6.16,
+    "p95": 3233.3,
+    "p99": 8417.9,
+    "light_p95": 415.2,
+    "light_p99": 968.1,
+    "light_median": 34.3,
+    "slo": 22.6,
+    "n_light": 1061
+  },
+  "budget_power_15": {
+    "light_over_budget_pct": 5.5,
+    "rps": 34.94,
+    "rps_std": 6.16,
+    "p95": 3133.9,
+    "p99": 8061.7,
+    "light_p95": 377.2,
+    "light_p99": 1427.1,
+    "light_median": 19.5,
+    "slo": 25.5,
+    "n_light": 1061
+  },
+  "budget_neural_15": {
+    "light_over_budget_pct": 2.6,
+    "rps": 35.38,
+    "rps_std": 5.73,
+    "p95": 3650.9,
+    "p99": 7904.8,
+    "light_p95": 157.7,
+    "light_p99": 270.5,
+    "light_median": 21.4,
+    "slo": 21.1,
+    "n_light": 1061
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "budget_linear_20": {
+    "light_over_budget_pct": 6.4,
+    "rps": 37.64,
+    "rps_std": 4.53,
+    "p95": 2825.7,
+    "p99": 7867.8,
+    "light_p95": 310.4,
+    "light_p99": 1117.5,
+    "light_median": 33.6,
+    "slo": 21.8,
+    "n_light": 1061
+  },
+  "split_linear_neural_20": {
+    "light_over_budget_pct": 1.7,
+    "rps": 36.19,
+    "rps_std": 4.66,
+    "p95": 3219.0,
+    "p99": 8082.2,
+    "light_p95": 136.8,
+    "light_p99": 297.5,
+    "light_median": 23.1,
+    "slo": 22.1,
+    "n_light": 1061
+  },
+  "split_neural_linear_15": {
+    "light_over_budget_pct": 7.2,
+    "rps": 36.66,
+    "rps_std": 4.93,
+    "p95": 2937.0,
+    "p99": 8026.8,
+    "light_p95": 417.3,
+    "light_p99": 1542.6,
+    "light_median": 36.0,
+    "slo": 21.8,
+    "n_light": 1061
+  },
+  "budget_neural_15": {
+    "light_over_budget_pct": 2.2,
+    "rps": 35.51,
+    "rps_std": 5.9,
+    "p95": 3251.5,
+    "p99": 8099.8,
+    "light_p95": 130.3,
+    "light_p99": 538.1,
+    "light_median": 20.3,
+    "slo": 22.2,
+    "n_light": 1061
+  }
+}

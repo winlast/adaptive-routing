@@ -1,0 +1,77 @@
+{
+  "traffic": "cpu_only",
+  "levels": {
+    "32": {
+      "all_sync": {
+        "light_over_budget_pct": null,
+        "rps": 55.92,
+        "avg": 542.3,
+        "median": 553.4,
+        "rps_std": 0.59,
+        "p95": 705.6,
+        "p99": 782.4,
+        "light_p95": null,
+        "light_p99": null,
+        "light_median": null,
+        "slo": 74.6,
+        "n_light": 0
+      },
+      "all_async": {
+        "light_over_budget_pct": null,
+        "rps": 8.74,
+        "avg": 2703.0,
+        "median": 2047.2,
+        "rps_std": 0.1,
+        "p95": 9927.7,
+        "p99": 23284.5,
+        "light_p95": null,
+        "light_p99": null,
+        "light_median": null,
+        "slo": 97.3,
+        "n_light": 0
+      },
+      "least_conn": {
+        "light_over_budget_pct": null,
+        "rps": 39.7,
+        "avg": 462.5,
+        "median": 293.7,
+        "rps_std": 0.94,
+        "p95": 1463.2,
+        "p99": 5328.4,
+        "light_p95": null,
+        "light_p99": null,
+        "light_median": null,
+        "slo": 9.2,
+        "n_light": 0
+      },
+      "budget_neural_30": {
+        "light_over_budget_pct": null,
+        "rps": 48.77,
+        "avg": 626.6,
+        "median": 623.7,
+        "rps_std": 2.34,
+        "p95": 859.7,
+        "p99": 1008.1,
+        "light_p95": null,
+        "light_p99": null,
+        "light_median": null,
+        "slo": 87.8,
+        "n_light": 0
+      },
+      "budget_neural_60": {
+        "light_over_budget_pct": null,
+        "rps": 48.93,
+        "avg": 623.5,
+        "median": 632.8,
+        "rps_std": 0.97,
+        "p95": 790.5,
+        "p99": 933.9,
+        "light_p95": null,
+        "light_p99": null,
+        "light_median": null,
+        "slo": 87.3,
+        "n_light": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "workers": [
+    "sync",
+    "async"
+  ],
+  "features": [
+    "маршрут=/api/user/profile",
+    "маршрут=/api/feed",
+    "маршрут=/api/auth/verify",
+    "маршрут=/api/image/thumbnail",
+    "маршрут=/api/search",
+    "маршрут=/api/report/generate",
+    "log(параметр)",
+    "log(параметр)^2",
+    "размер тела",
+    "движок=sync",
+    "движок=async"
+  ]
+}
