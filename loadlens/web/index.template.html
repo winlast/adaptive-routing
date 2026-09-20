@@ -49,6 +49,9 @@ th { color:var(--muted); font-weight:600; font-size:12px;
   border-radius:0 9px 9px 0; padding:13px 15px; margin:20px 0;
   color:var(--muted); font-size:14px }
 .hidden { display:none }
+pre { background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:13px 15px; overflow-x:auto; font-size:12.5px; line-height:1.5;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; margin:0 0 14px }
 footer { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
   color:var(--muted); font-size:13px }
 a { color:var(--accent) }
@@ -70,6 +73,21 @@ a { color:var(--accent) }
   сервера: журнал читается и разбирается прямо в браузере.</p>
 
   <div id="report" class="hidden"></div>
+
+  <div id="share" class="hidden">
+    <h2>Помочь проекту</h2>
+    <p class="sub" style="margin-bottom:14px">У нас нет журналов настоящих
+    компаний, и это главный пробел в проверке. Если вы готовы поделиться
+    обезличенной сводкой — она сильно поможет.</p>
+    <div class="note" id="share-note">Ниже — <strong>ровно то</strong>, что
+    будет отправлено. Ни адресов, ни параметров, ни одной строки журнала:
+    только числа. Ничего не уходит само — вы копируете текст и решаете
+    сами.</div>
+    <pre id="share-text"></pre>
+    <button class="primary" id="copy">Скопировать</button>
+    <a id="issue" href="#" target="_blank" rel="noopener">
+      <button>Открыть форму на GitHub</button></a>
+  </div>
 
   <footer>
     LoadLens — диагностика скрытой от балансировщика стоимости запросов.
@@ -171,6 +189,40 @@ function render(a) {
   `;
   $("report").classList.remove("hidden");
   $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+  prepareShare(a);
+}
+
+// Обезличенная сводка. Адреса маршрутов и значения параметров сюда не
+// попадают намеренно: по ним видно, что за сервис и что в нём
+// запрашивают. Остаются только числа, по которым нельзя восстановить
+// ни одного обращения.
+function prepareShare(a) {
+  const summary = {
+    обращений: a.total,
+    маршрутов: a.routes.length,
+    ошибка_оценки_по_маршруту: +a.routeError.toFixed(1),
+    ошибка_оценки_по_признакам: +a.paramError.toFixed(1),
+    доля_времени_у_десятой_части_тяжёлых: +a.heavyShareOfTime.toFixed(1),
+    разбросы_внутри_маршрутов: a.routes
+      .slice(0, 12)
+      .map((r) => ({
+        доля_времени: +r.shareOfTime.toFixed(1),
+        обращений: r.count,
+        p50_мс: +r.p50.toFixed(1),
+        p99_мс: +r.p99.toFixed(1),
+        разброс_раз: +r.spread.toFixed(1),
+        "объясняется_параметром_%": +(r.explained * 100).toFixed(0),
+      })),
+  };
+  const text = JSON.stringify(summary, null, 2);
+  $("share-text").textContent = text;
+  $("issue").href =
+    "https://github.com/winlast/adaptive-routing/issues/new?title=" +
+    encodeURIComponent("Результат диагностики") +
+    "&body=" +
+    encodeURIComponent("Сводка получена в браузере, журнал не передавался.\n\n```json\n" +
+      text + "\n```\n\nЧто за сервис (по желанию): ");
+  $("share").classList.remove("hidden");
 }
 
 function handle(text) {
@@ -191,6 +243,22 @@ const read = (file) => file.text().then(handle);
 $("pick").onclick = () => $("file").click();
 $("file").onchange = (e) => e.target.files[0] && read(e.target.files[0]);
 $("demo").onclick = () => handle(DEMO_LOG);
+
+$("copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("share-text").textContent);
+    $("copy").textContent = "Скопировано";
+    setTimeout(() => ($("copy").textContent = "Скопировать"), 2000);
+  } catch {
+    // Доступ к буферу обмена может быть закрыт — тогда текст просто
+    // выделяется, и его копируют вручную.
+    const range = document.createRange();
+    range.selectNodeContents($("share-text"));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+};
 
 const drop = $("drop");
 drop.addEventListener("dragover", (e) => {

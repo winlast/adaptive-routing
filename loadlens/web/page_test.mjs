@@ -8,7 +8,7 @@ if (!m) { console.log("СКРИПТ НЕ НАЙДЕН"); process.exit(1); }
 
 const stubs = new Map();
 const makeEl = () => ({
-  innerHTML: "", classList: { add(){}, remove(){}, contains:()=>false },
+  innerHTML: "", textContent: "", href: "", classList: { add(){}, remove(){}, contains:()=>false },
   addEventListener(){}, scrollIntoView(){}, click(){},
   set onclick(v){}, set onchange(v){},
 });
@@ -27,6 +27,21 @@ globalThis.__handle(
   readFileSync("loadlens/demo_access.log", "utf-8"));
 const out = stubs.get("report").innerHTML;
 console.log("длина отчёта:", out.length);
+if (out.length < 500) { console.log("ОТЧЁТ ПУСТ"); process.exit(1); }
+
+// Обезличенная сводка: проверяем, что она собралась и что в неё не
+// попало ничего, кроме чисел.
+const share = stubs.get("share-text").textContent;
+console.log("длина сводки:", share.length);
+if (!share.includes("разбросы_внутри_маршрутов")) {
+  console.log("СВОДКА НЕ СОБРАНА"); process.exit(1);
+}
+for (const leak of ["/api/", "limit", "http"]) {
+  if (share.includes(leak)) {
+    console.log("В СВОДКУ ПОПАЛО ЛИШНЕЕ: " + leak); process.exit(1);
+  }
+}
+console.log("сводка обезличена: адресов и параметров нет");
 for (const probe of ["/api/search", "разброс внутри маршрута",
                      "ошибка оценки по маршруту", "Вывод"]) {
   console.log((out.includes(probe) ? "есть  " : "НЕТ   ") + probe);
