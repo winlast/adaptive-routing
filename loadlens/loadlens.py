@@ -80,8 +80,17 @@ def normalize_path(raw: str) -> tuple[str, dict[str, float]]:
     for key, value in parse_qsl(parts.query, keep_blank_values=False):
         try:
             params[key] = float(value)
-        except ValueError:
             continue
+        except ValueError:
+            pass
+        # Нечисловой параметр тоже влияет на стоимость: сортировка,
+        # фильтр, набор запрашиваемых полей. Числом его не выразить, но
+        # само его присутствие — уже признак, и прокси его видит.
+        params[f"есть:{key}"] = 1.0
+        if "," in value:
+            # Перечисление (например, список полей) — его длина обычно
+            # пропорциональна объёму работы.
+            params[f"число:{key}"] = float(value.count(",") + 1)
     return route, params
 
 
@@ -258,6 +267,93 @@ def unqueued(pairs: list[tuple[float, float]],
     return out
 
 
+def solve(a: list[list[float]], b: list[float]) -> list[float] | None:
+    """Решение системы методом Гаусса с выбором главного элемента."""
+    n = len(b)
+    m = [row[:] + [b[i]] for i, row in enumerate(a)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(m[r][col]))
+        if abs(m[pivot][col]) < 1e-12:
+            return None
+        m[col], m[pivot] = m[pivot], m[col]
+        for r in range(n):
+            if r == col:
+                continue
+            f = m[r][col] / m[col][col]
+            for c in range(col, n + 1):
+                m[r][c] -= f * m[col][c]
+    return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def fit_multi(rows: list[tuple[dict[str, float], float]],
+              names: list[str]) -> tuple[dict[str, float], float] | None:
+    """
+    Подбирает зависимость стоимости сразу от нескольких признаков.
+
+    Одного параметра мало. В настоящих интерфейсах стоимость определяют
+    несколько вещей одновременно: сколько строк просят, нужна ли
+    сортировка, сколько полей возвращать, стоит ли фильтр. Выбирая один
+    «лучший» параметр, мы объясняли малую долю разброса — это выяснилось
+    на чужом сервисе, а не на своём стенде.
+
+    Подгонка ведётся в логарифмах: произведение степеней превращается в
+    сумму, и обычный метод наименьших квадратов даёт коэффициенты сразу
+    для всех признаков. Возвращается отображение «признак → показатель»
+    и доля объяснённой дисперсии.
+    """
+    if len(rows) < max(12, 3 * (len(names) + 1)):
+        return None
+
+    def vec(params: dict[str, float]) -> list[float]:
+        out = [1.0]
+        for name in names:
+            value = params.get(name, 0.0)
+            out.append(math.log(max(value, 1.0)) if not name.startswith("есть:")
+                       else value)
+        return out
+
+    k = len(names) + 1
+    ata = [[0.0] * k for _ in range(k)]
+    atb = [0.0] * k
+    ys = []
+    for params, duration in rows:
+        x = vec(params)
+        y = math.log(max(duration, 1e-9))
+        ys.append(y)
+        for i in range(k):
+            atb[i] += x[i] * y
+            for j in range(k):
+                ata[i][j] += x[i] * x[j]
+    # Небольшая регуляризация: признаки бывают почти коллинеарны, и без
+    # неё система оказывается вырожденной.
+    for i in range(1, k):
+        ata[i][i] += 1e-6
+
+    coef = solve(ata, atb)
+    if coef is None:
+        return None
+
+    mean = sum(ys) / len(ys)
+    ss_tot = sum((y - mean) ** 2 for y in ys)
+    ss_res = sum((ys[i] - sum(c * v for c, v in zip(coef, vec(rows[i][0]))))
+                 ** 2 for i in range(len(rows)))
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 1e-12 else 0.0
+    return ({"(свободный член)": coef[0],
+             **{names[i]: coef[i + 1] for i in range(len(names))}},
+            max(0.0, min(1.0, r2)))
+
+
+def predict_multi(model: dict[str, float], params: dict[str, float]) -> float:
+    total = model["(свободный член)"]
+    for name, coef in model.items():
+        if name == "(свободный член)":
+            continue
+        value = params.get(name, 0.0)
+        total += coef * (value if name.startswith("есть:")
+                         else math.log(max(value, 1.0)))
+    return math.exp(total)
+
+
 def median_ape(predicted: list[float], actual: list[float]) -> float:
     """Медианная относительная ошибка, %."""
     errors = [abs(p - a) / max(a, 1e-9) * 100
@@ -279,6 +375,14 @@ class RouteReport:
     explained: float = 0.0  # доля объяснённой дисперсии
     route_error: float = 0.0    # ошибка оценки по маршруту, %
     param_error: float = 0.0    # ошибка оценки по параметру, %
+    # Оценка сразу по нескольким признакам запроса. Считается на
+    # отложенной половине обращений, и одиночный параметр на той же
+    # половине — иначе сравнение нечестно: у модели с бо́льшим числом
+    # признаков всегда меньше ошибка на тех данных, где её настраивали.
+    multi: dict[str, float] | None = None
+    multi_explained: float = 0.0
+    holdout_param_error: float = 0.0
+    holdout_multi_error: float = 0.0
 
 
 @dataclass
@@ -355,6 +459,28 @@ def analyse(requests: list[Request], heavy_percentile: float = 0.9) -> Analysis:
 
         report.route_error = median_ape(route_pred, eval_y)
         report.param_error = median_ape(param_pred, eval_y)
+
+        # Стоимость редко определяется одним числом. В настоящих
+        # интерфейсах на неё влияют сразу несколько вещей: сколько
+        # записей просят, нужна ли сортировка, сколько полей вернуть,
+        # стоит ли фильтр. Здесь проверяется, добавляют ли остальные
+        # признаки что-то поверх лучшего одиночного параметра.
+        names = sorted({key for r in group for key in r.params})
+        if best and len(names) > 1:
+            key = best[0]
+            rows = [(r.params, r.duration_ms) for r in group]
+            train = [rows[i] for i in range(0, len(rows), 2)]
+            test = [rows[i] for i in range(1, len(rows), 2)]
+            fitted = fit_multi(train, names)
+            single = fit_multi(train, [key])
+            if fitted and single and test:
+                report.multi = fitted[0]
+                report.multi_explained = fitted[1]
+                actual = [d for _, d in test]
+                report.holdout_multi_error = median_ape(
+                    [predict_multi(fitted[0], pr) for pr, _ in test], actual)
+                report.holdout_param_error = median_ape(
+                    [predict_multi(single[0], pr) for pr, _ in test], actual)
         result.routes.append(report)
 
         all_route_pred += route_pred
@@ -461,6 +587,32 @@ def print_report(a: Analysis, top: int = 8) -> None:
     print("  в очереди по признакам запроса не предсказуемо ни одной оценкой.")
     print()
 
+    multi = [r for r in a.routes
+             if r.multi and r.holdout_param_error > 0]
+    if multi:
+        print("Одного параметра мало: оценка сразу по нескольким признакам")
+        print("-" * 78)
+        print(f"{'маршрут':<30}{'один параметр':>16}{'все признаки':>16}"
+              f"{'объясняет':>13}")
+        for r in multi[:top]:
+            print(f"{r.route[:29]:<30}{r.holdout_param_error:>15.1f}%"
+                  f"{r.holdout_multi_error:>15.1f}%"
+                  f"{r.multi_explained * 100:>12.0f}%")
+        print()
+        print("  Обе оценки настроены на одной половине обращений и проверены")
+        print("  на другой: у модели с бо́льшим числом признаков ошибка на")
+        print("  своих же данных всегда меньше, и сравнивать там нечестно.")
+        heaviest = multi[0]
+        weights = sorted(((k, v) for k, v in heaviest.multi.items()
+                          if k != "(свободный член)"),
+                         key=lambda kv: -abs(kv[1]))[:4]
+        if weights:
+            print()
+            print(f"  Что влияет на «{heaviest.route[:40]}»:")
+            for name, coef in weights:
+                print(f"    {name:<28}{coef:+.2f}")
+        print()
+
     print("Концентрация нагрузки")
     print("-" * 78)
     print(f"  {a.heavy_share_of_requests:.0f} % самых тяжёлых обращений "
@@ -487,7 +639,19 @@ def verdict(a: Analysis) -> None:
               "задаётся на маршрут,")
         print("  а различие лежит внутри него. Настроить веса так, чтобы "
               "это учесть, нельзя.")
-        if worst.best_param:
+        if worst.multi and worst.multi_explained > worst.explained:
+            top_name = max(
+                ((k, v) for k, v in worst.multi.items()
+                 if k != "(свободный член)"), key=lambda kv: abs(kv[1]))[0]
+            print(f"  При этом разброс предсказуем по видимым признакам "
+                  f"запроса на")
+            print(f"  {worst.multi_explained * 100:.0f} %, и сильнее всего "
+                  f"на стоимость влияет «{top_name}».")
+            print(f"  Одного параметра здесь недостаточно: по нему одному "
+                  f"объясняется лишь")
+            print(f"  {worst.explained * 100:.0f} %. Все признаки видны "
+                  f"прокси до обработки запроса.")
+        elif worst.best_param:
             print(f"  При этом разброс предсказуем: он объясняется "
                   f"параметром «{worst.best_param}»")
             print(f"  на {worst.explained * 100:.0f} % и виден прокси "

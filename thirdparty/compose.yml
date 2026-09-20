@@ -1,0 +1,43 @@
+# Стенд для проверки на чужом ПО.
+#
+# PostgREST — распространённый способ поднять REST-интерфейс над
+# PostgreSQL. Его маршруты и параметры придуманы не нами: `limit`,
+# `offset`, `select`, `order` — это его собственный интерфейс.
+#
+# Перед ним nginx, который ведёт обычный журнал обращений со временем
+# ответа. Именно такой журнал читает `loadlens`, и именно такой журнал
+# есть у любой команды.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    volumes:
+      - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demo"]
+      interval: 3s
+      retries: 20
+
+  api:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: postgres://postgres:demo@db:5432/demo
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: web_anon
+      PGRST_SERVER_PORT: "3000"
+      PGRST_DB_MAX_ROWS: "100000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  proxy:
+    image: openresty/openresty:alpine
+    ports:
+      - "127.0.0.1:8500:8500"
+    volumes:
+      - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./logs:/var/log/nginx
+    depends_on:
+      - api
