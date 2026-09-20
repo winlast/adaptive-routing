@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-import zipfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -47,19 +46,16 @@ def deck_text(path: Path) -> str:
                      for sh in slide.shapes if sh.has_text_frame)
 
 
-def article_text(path: Path) -> str:
-    with zipfile.ZipFile(path) as z:
-        xml = z.read("word/document.xml").decode("utf-8")
-    return "".join(re.findall(r"<w:t(?: [^>]*)?>(.*?)</w:t>", xml, re.S))
-
-
 def main() -> int:
     detail = load("cost_grid_detail.json")
 
     def blk(ep, prm, worker, field):
         return next(r[field] for r in detail[ep][worker] if r["param"] == prm)
 
-    # Таблица 1 статьи
+    # Профилирование: те же величины, что стояли в таблице 1 статьи.
+    # Статьи переехали на ветку research, а проверка осталась: эти числа
+    # по-прежнему стоят в PROJECT_STATE, в презентации премии и в README
+    # и разойтись с данными могут так же.
     for ep, prm, vals in [
         ("/api/auth/verify", 1, (130, 9, 127, 125)),
         ("/api/report/generate", 45, (328, 76, 333, 222)),
@@ -68,7 +64,7 @@ def main() -> int:
     ]:
         for i, (w, f) in enumerate((("sync", "own_ms"), ("sync", "block_ms"),
                                     ("async", "own_ms"), ("async", "block_ms"))):
-            check(f"табл.1 {ep}?{prm} {w}/{f}", vals[i], blk(ep, prm, w, f))
+            check(f"профиль {ep}?{prm} {w}/{f}", vals[i], blk(ep, prm, w, f))
 
     # Точность оценок
     acc = load("estimator_accuracy.json")["overall"]
@@ -139,16 +135,8 @@ def main() -> int:
                   "123 мс\u00a0в цикле", "задержка 123",
                   "174 мкс"]
     banned_new = ["39–87", "39-87", "1,8–2,4"]
-    for path in sorted(BASE.glob("docs/*.docx")):
-        if path.name.startswith("~$"):
-            continue
-        text = article_text(path)
-        legacy_abstract = "v1" in path.name
-        for b in banned_all + ([] if legacy_abstract else banned_new):
-            if b in text:
-                problems.append(f"{path.name}: встречается устаревшее «{b}»")
-        if legacy_abstract and "39–87" not in text:
-            problems.append(f"{path.name}: исходная аннотация утрачена")
+    # Статьи и их аннотации переехали на ветку research и здесь больше
+    # не проверяются. Ветку research мы не трогаем.
 
     # Проверка на чужом ПО и производственная трасса
     third = load("thirdparty_postgrest.json")
@@ -220,8 +208,7 @@ def main() -> int:
             if b in text:
                 problems.append(f"{name}: встречается устаревшее «{b}»")
 
-    decks = sorted(BASE.glob("docs/*.pptx")) + \
-        sorted(BASE.glob("ledentsov/presentation/*.pptx"))
+    decks = sorted(BASE.glob("ledentsov/presentation/*.pptx"))
     for path in decks:
         if path.name.startswith("~$"):
             continue
