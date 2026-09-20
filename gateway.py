@@ -55,9 +55,9 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
 WORKER_URLS = {
-    "sync": "http://127.0.0.1:8201/process",
-    "async": "http://127.0.0.1:8202/process",
-    "process": "http://127.0.0.1:8203/process",
+    "sync": os.environ.get("SYNC_URL", "http://127.0.0.1:8201/process"),
+    "async": os.environ.get("ASYNC_URL", "http://127.0.0.1:8202/process"),
+    "process": os.environ.get("PROCESS_URL", "http://127.0.0.1:8203/process"),
 }
 
 POLICY_NAME = os.environ.get("POLICY", "least_conn")
@@ -273,5 +273,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8300,
+    uvicorn.run(app, host=os.environ.get("BIND_HOST", "127.0.0.1"), port=8300,
                 log_level="warning", loop="uvloop", http="httptools")

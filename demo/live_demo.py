@@ -37,7 +37,8 @@ from core.workload import ENDPOINTS, sample_param
 from experiments.load_generator import LIGHT_ENDPOINT, TRAFFIC_MIX
 
 BASE = Path(__file__).resolve().parent.parent
-GATEWAY = "http://127.0.0.1:8300/route"
+GATEWAY_HOST = os.environ.get("GATEWAY_HOST", "127.0.0.1")
+GATEWAY = f"http://{GATEWAY_HOST}:8300/route"
 PORT = 8400
 
 # Лёгкое обращение: быстрый ответ, именно оно и страдает от блокировки.
@@ -100,7 +101,7 @@ def start_gateway(mode: str) -> None:
     for _ in range(50):
         time.sleep(0.3)
         try:
-            r = httpx.get("http://127.0.0.1:8300/health", timeout=2)
+            r = httpx.get(f"http://{GATEWAY_HOST}:8300/health", timeout=2)
             if r.status_code == 200 and r.json().get("policy") == mode:
                 state["mode"] = mode
                 return
@@ -238,4 +239,5 @@ if __name__ == "__main__":
     import uvicorn
 
     print(f"Демонстрация: http://127.0.0.1:{PORT}")
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
+    uvicorn.run(app, host=os.environ.get("BIND_HOST", "127.0.0.1"),
+                port=PORT, log_level="warning")

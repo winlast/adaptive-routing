@@ -11,6 +11,7 @@
 именно так ведёт себя типичный async-сервис, в который попала CPU-задача
 без выноса в executor.
 """
+import os
 import sys
 import threading
 import time
@@ -96,6 +97,6 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        app, host="127.0.0.1", port=8202,
+        app, host=os.environ.get("BIND_HOST", "127.0.0.1"), port=8202,
         log_level="warning", loop="uvloop", http="httptools",
     )

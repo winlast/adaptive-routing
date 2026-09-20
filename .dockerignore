@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+docs/
+figures/
+ledentsov/
+thirdparty/logs/
+data/*_log.csv
+data/requests_log*.csv
+Регламент и требования/

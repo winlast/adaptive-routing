@@ -10,6 +10,7 @@
 сам никогда не становится узким местом эксперимента.
 """
 import asyncio
+import os
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -47,6 +48,6 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        app, host="127.0.0.1", port=8100,
+        app, host=os.environ.get("BIND_HOST", "127.0.0.1"), port=8100,
         log_level="warning", loop="uvloop", http="httptools",
     )

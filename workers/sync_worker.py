@@ -8,6 +8,7 @@
 Слабая сторона — каждый одновременный запрос стоит отдельного потока ОС,
 поэтому массовое I/O-ожидание обходится дороже, чем event loop.
 """
+import os
 import sys
 import threading
 import time
@@ -73,4 +74,5 @@ def health():
 
 if __name__ == "__main__":
     ensure_database()
-    app.run(host="127.0.0.1", port=8201, threaded=True)
+    app.run(host=os.environ.get("BIND_HOST", "127.0.0.1"), port=8201,
+            threaded=True)
