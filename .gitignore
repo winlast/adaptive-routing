@@ -32,3 +32,4 @@ data/benchmark_requests_log.csv
 
 # Временные файлы Word (документ открыт)
 ~$*
+data/demo_requests_log.csv
