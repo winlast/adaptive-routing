@@ -205,7 +205,7 @@ def main() -> int:
     # статьями после исправления чисел. Проверяются все, кроме
     # PROJECT_STATE: он намеренно хранит историю, включая отброшенные
     # величины, и устаревшее число там — запись, а не ошибка.
-    public = ["README.md", "ПРОВЕРЬ_САМ.md", "loadlens/README.md",
+    public = ["README.md", "README.en.md", "ПРОВЕРЬ_САМ.md", "loadlens/README.md",
               "loadlens/web/README.md", "docker/README.md",
               "nginx/README.md", "thirdparty/RESULT.md",
               "thirdparty/AZURE.md", "ledentsov/ЗАЯВКА.md",
