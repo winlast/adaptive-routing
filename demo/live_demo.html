@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LoadLens — живая демонстрация</title>
+<style>
+:root{--bg:#0f141a;--panel:#161d26;--line:#26313d;--ink:#e6edf3;
+      --muted:#94a3b2;--ok:#4ade80;--warn:#f87171;--accent:#60a5fa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:16px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 18px}
+h1{font-size:23px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 22px;font-size:15px}
+.modes{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+button{font:inherit;padding:11px 16px;border-radius:10px;cursor:pointer;
+       border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);border-color:var(--accent);color:#08131f;
+          font-weight:600}
+button.heavy{background:var(--warn);border-color:var(--warn);color:#2b0b0b;
+             font-weight:600;padding:13px 22px}
+button:disabled{opacity:.45;cursor:wait}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+       gap:12px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+      padding:14px}
+.card .n{font-size:27px;font-weight:650;letter-spacing:-.02em}
+.card .l{color:var(--muted);font-size:12.5px;margin-top:3px}
+canvas{width:100%;height:320px;background:var(--panel);
+       border:1px solid var(--line);border-radius:12px;display:block}
+.legend{color:var(--muted);font-size:13px;margin-top:10px}
+.flash{color:var(--warn);font-weight:600}
+</style></head><body><div class="wrap">
+<h1>Что происходит, когда приходит один тяжёлый запрос</h1>
+<p class="sub">Внизу идёт непрерывный поток лёгких обращений. Нажмите
+красную кнопку и смотрите, что станет с их временем ответа.</p>
+
+<div class="modes" id="modes"></div>
+<div class="modes">
+  <button class="heavy" id="heavy">Вбросить один тяжёлый запрос</button>
+  <button id="stream">Включить смешанный поток</button>
+</div>
+
+<div class="stats">
+  <div class="card"><div class="n" id="now">—</div>
+    <div class="l">сейчас, мс</div></div>
+  <div class="card"><div class="n" id="med">—</div>
+    <div class="l">медиана, мс</div></div>
+  <div class="card"><div class="n" id="max">—</div>
+    <div class="l">худший за последние 120, мс</div></div>
+  <div class="card"><div class="n" id="slow">—</div>
+    <div class="l">доля дольше 200 мс</div></div>
+</div>
+
+<canvas id="c"></canvas>
+<p class="legend" id="legend">Каждая точка — одно лёгкое обращение.
+Красная отметка — момент, когда пришёл тяжёлый запрос.</p>
+</div>
+<script>
+const MODES = {"all_async":"Всё в асинхронный движок",
+               "budget_power_30":"С классификатором нагрузки",
+               "least_conn":"Обычная балансировка"};
+let mode = "all_async", points = [], heavyAgo = null;
+
+const box = document.getElementById("modes");
+Object.entries(MODES).forEach(([k,v])=>{
+  const b=document.createElement("button"); b.textContent=v; b.dataset.k=k;
+  b.onclick=async()=>{
+    document.querySelectorAll("#modes button").forEach(x=>x.disabled=true);
+    await fetch("/api/mode/"+k,{method:"POST"});
+    document.querySelectorAll("#modes button").forEach(x=>x.disabled=false);
+  };
+  box.appendChild(b);
+});
+document.getElementById("heavy").onclick=()=>fetch("/api/heavy",{method:"POST"});
+let streamOn=false;
+document.getElementById("stream").onclick=()=>{
+  streamOn=!streamOn;
+  fetch("/api/heavy-stream/"+(streamOn?"on":"off"),{method:"POST"});
+};
+
+const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+function draw(){
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight;
+  cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  const vals=points.filter(v=>v!==null);
+  const top=Math.max(120, Math.ceil(Math.max(...vals,0)/100)*100);
+  const pad=42;
+  ctx.strokeStyle="#26313d"; ctx.fillStyle="#94a3b2";
+  ctx.font="12px system-ui"; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad+(H-pad*1.4)*i/4, v=Math.round(top*(1-i/4));
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-8,y); ctx.stroke();
+    ctx.fillText(v+" мс",6,y-4);
+  }
+  // порог 200 мс
+  const y200=pad+(H-pad*1.4)*(1-Math.min(200,top)/top);
+  ctx.strokeStyle="#f8717155"; ctx.setLineDash([5,5]);
+  ctx.beginPath(); ctx.moveTo(pad,y200); ctx.lineTo(W-8,y200); ctx.stroke();
+  ctx.setLineDash([]);
+  if(points.length<2) return;
+  const step=(W-pad-10)/Math.max(points.length-1,1);
+  ctx.lineWidth=2; ctx.beginPath();
+  points.forEach((v,i)=>{
+    if(v===null) return;
+    const x=pad+i*step, y=pad+(H-pad*1.4)*(1-Math.min(v,top)/top);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = (Math.max(...vals,0)>200)?"#f87171":"#4ade80";
+  ctx.stroke();
+}
+function stats(){
+  const vals=points.filter(v=>v!==null);
+  const f=document.getElementById("now");
+  if(!vals.length){f.textContent="—";return;}
+  const s=[...vals].sort((a,b)=>a-b);
+  const last=vals[vals.length-1], mx=s[s.length-1];
+  f.textContent=Math.round(last);
+  f.style.color = last>200?"var(--warn)":"var(--ok)";
+  document.getElementById("med").textContent=Math.round(s[s.length>>1]);
+  const m=document.getElementById("max");
+  m.textContent=Math.round(mx); m.style.color=mx>200?"var(--warn)":"var(--ok)";
+  const slow=vals.filter(v=>v>200).length/vals.length*100;
+  const sl=document.getElementById("slow");
+  sl.textContent=slow.toFixed(0)+" %";
+  sl.style.color = slow>10?"var(--warn)":"var(--ok)";
+}
+new EventSource("/api/stream").onmessage=e=>{
+  const d=JSON.parse(e.data);
+  points=d.points; heavyAgo=d.heavy_ago; mode=d.mode;
+  document.querySelectorAll("#modes button").forEach(b=>
+    b.classList.toggle("on", b.dataset.k===mode));
+  const sb=document.getElementById("stream");
+  streamOn = d.heavy_stream;
+  sb.classList.toggle("on", streamOn);
+  sb.textContent = streamOn ? "Выключить смешанный поток"
+                            : "Включить смешанный поток";
+  const lg=document.getElementById("legend");
+  lg.innerHTML = streamOn
+    ? "<span class='flash'>Идёт смешанный поток.</span> Это ровно тот "
+      + "трафик, на котором получены числа в статьях: те же маршруты, то "
+      + "же распределение параметров, конкурентность 24. Здесь политики и "
+      + "расходятся."
+    : ((heavyAgo!==null && heavyAgo<3)
+       ? "<span class='flash'>Тяжёлый запрос в работе…</span> смотрите на график"
+       : "Каждая точка — одно лёгкое обращение за последние "
+         + Math.round(d.window) + " секунд. Пунктир — порог 200 мс, выше "
+         + "которого задержка заметна пользователю.");
+  draw(); stats();
+};
+window.addEventListener("resize",draw);
+</script></body></html>
