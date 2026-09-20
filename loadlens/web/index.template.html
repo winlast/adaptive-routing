@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoadLens — что скрыто от балансировщика</title>
+<style>
+:root {
+  --ink:#16202b; --muted:#5d6b7a; --line:#dde4ea; --accent:#1565c0;
+  --warn:#c62828; --ok:#2e7d32; --bg:#fff; --card:#f6f9fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e6edf3; --muted:#9aa7b4; --line:#27323e; --bg:#0e1319;
+          --card:#151d26; --accent:#5aa9f5; --warn:#ef6b6b; --ok:#5fc27e; }
+}
+* { box-sizing:border-box }
+body { margin:0; padding:28px 16px 64px; background:var(--bg); color:var(--ink);
+  font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif }
+.wrap { max-width:940px; margin:0 auto }
+h1 { font-size:27px; margin:0 0 6px; letter-spacing:-.02em }
+.sub { color:var(--muted); margin:0 0 26px }
+.drop { border:2px dashed var(--line); border-radius:14px; padding:34px 20px;
+  text-align:center; background:var(--card); transition:border-color .15s }
+.drop.over { border-color:var(--accent) }
+.drop p { margin:0 0 14px; color:var(--muted) }
+button { font:inherit; font-weight:600; padding:10px 18px; border-radius:9px;
+  border:1px solid var(--line); background:var(--bg); color:var(--ink);
+  cursor:pointer }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff }
+button + button { margin-left:8px }
+.privacy { margin:16px 0 0; font-size:13px; color:var(--muted); text-align:center }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px; margin:26px 0 }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:15px }
+.card .n { font-size:29px; font-weight:650; letter-spacing:-.02em }
+.card .l { color:var(--muted); font-size:13px; margin-top:3px }
+h2 { font-size:18px; margin:30px 0 10px }
+.scroll { overflow-x:auto; -webkit-overflow-scrolling:touch }
+table { width:100%; border-collapse:collapse; font-size:14px; min-width:520px }
+th,td { text-align:right; padding:9px 10px; border-bottom:1px solid var(--line) }
+th:first-child,td:first-child { text-align:left;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px }
+th { color:var(--muted); font-weight:600; font-size:12px;
+  text-transform:uppercase; letter-spacing:.04em }
+.big { color:var(--warn); font-weight:650 }
+.good { color:var(--ok); font-weight:650 }
+.note { background:var(--card); border-left:3px solid var(--accent);
+  border-radius:0 9px 9px 0; padding:13px 15px; margin:20px 0;
+  color:var(--muted); font-size:14px }
+.hidden { display:none }
+footer { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
+  color:var(--muted); font-size:13px }
+a { color:var(--accent) }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Что скрыто от балансировщика</h1>
+  <p class="sub">Читает обычный журнал обращений и показывает, насколько
+  стоимость запросов различается внутри одного маршрута.</p>
+
+  <div class="drop" id="drop">
+    <p>Перетащите сюда журнал nginx — или посмотрите на готовом примере.</p>
+    <button class="primary" id="pick">Выбрать файл</button>
+    <button id="demo">Показать на примере</button>
+    <input type="file" id="file" class="hidden" accept=".log,.txt,.json,.csv">
+  </div>
+  <p class="privacy">Файл никуда не отправляется. У этой страницы нет
+  сервера: журнал читается и разбирается прямо в браузере.</p>
+
+  <div id="report" class="hidden"></div>
+
+  <footer>
+    LoadLens — диагностика скрытой от балансировщика стоимости запросов.
+    Тот же разбор доступен как программа командной строки; числа
+    совпадают, это проверяется автоматически.
+  </footer>
+</div>
+
+<script type="module">
+/* __LOADLENS_JS__ */
+
+const DEMO_LOG = `__DEMO_LOG__`;
+
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 0) =>
+  Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "—";
+
+function render(a) {
+  const worst = a.routes.find((r) => r.spread >= 3) || a.routes[0];
+  const ratio = a.paramError > 0 && a.routeError > a.paramError
+    ? a.routeError / a.paramError : null;
+
+  const rows = a.routes.slice(0, 10).map((r) => `
+    <tr>
+      <td>${r.route}</td>
+      <td>${fmt(r.shareOfTime, 1)} %</td>
+      <td>${fmt(r.p50)}</td>
+      <td>${fmt(r.p99)}</td>
+      <td class="${r.spread >= 10 ? "big" : ""}">${fmt(r.spread)}×</td>
+    </tr>`).join("");
+
+  const explained = a.routes.filter((r) => r.bestParam && r.explained > 0.3);
+  const explainedBlock = explained.length ? `
+    <h2>Чем разброс объясняется</h2>
+    <div class="scroll"><table>
+      <tr><th>маршрут</th><th>параметр</th><th>закон</th><th>объясняет</th></tr>
+      ${explained.slice(0, 10).map((r) => `
+        <tr><td>${r.route}</td><td>${r.bestParam}</td>
+        <td>~ ${r.bestParam}<sup>${fmt(r.exponent, 2)}</sup></td>
+        <td class="good">${fmt(r.explained * 100)} %</td></tr>`).join("")}
+    </table></div>` : "";
+
+  const multi = a.routes.filter((r) => r.multi && r.holdoutParamError > 0);
+  const multiBlock = multi.length ? `
+    <h2>Одного параметра мало</h2>
+    <div class="scroll"><table>
+      <tr><th>маршрут</th><th>один параметр</th><th>все признаки</th>
+          <th>объясняет</th></tr>
+      ${multi.slice(0, 6).map((r) => `
+        <tr><td>${r.route}</td>
+        <td>${fmt(r.holdoutParamError, 1)} %</td>
+        <td class="good">${fmt(r.holdoutMultiError, 1)} %</td>
+        <td>${fmt(r.multiExplained * 100)} %</td></tr>`).join("")}
+    </table></div>
+    <div class="note">Обе оценки настроены на одной половине обращений и
+    проверены на другой: у модели с бо́льшим числом признаков ошибка на
+    своих же данных всегда меньше, и сравнивать там нечестно.</div>` : "";
+
+  $("report").innerHTML = `
+    <div class="cards">
+      <div class="card"><div class="n">${a.total.toLocaleString("ru")}</div>
+        <div class="l">обращений разобрано</div></div>
+      <div class="card"><div class="n big">${fmt(worst ? worst.spread : 0)}×</div>
+        <div class="l">разброс внутри маршрута</div></div>
+      <div class="card"><div class="n">${fmt(a.routeError, 1)} %</div>
+        <div class="l">ошибка оценки по маршруту</div></div>
+      <div class="card"><div class="n good">${fmt(a.paramError, 1)} %</div>
+        <div class="l">ошибка по признакам запроса</div></div>
+    </div>
+
+    <h2>Разброс стоимости внутри маршрута</h2>
+    <div class="scroll"><table>
+      <tr><th>маршрут</th><th>доля времени</th><th>p50, мс</th>
+          <th>p99, мс</th><th>разброс</th></tr>
+      ${rows}
+    </table></div>
+    ${explainedBlock}
+    ${multiBlock}
+
+    <h2>Концентрация нагрузки</h2>
+    <p>${fmt(a.heavyShareOfRequests)} % самых тяжёлых обращений занимают
+    <strong>${fmt(a.heavyShareOfTime)} %</strong> всего времени обработки.</p>
+
+    ${ratio ? `<div class="note">Оценка по признакам запроса точнее оценки
+      по маршруту <strong>в ${fmt(ratio, 1)} раза</strong>. Сравнение ведётся
+      по наименее загруженным обращениям: ожидание в очереди по признакам
+      запроса не предсказуемо ни одной из оценок, и включать его значило бы
+      мерить шум.</div>` : ""}
+
+    ${worst && worst.spread >= 3 ? `
+      <h2>Вывод</h2>
+      <p>Внутри маршрута <code>${worst.route}</code> стоимость обращений
+      различается <strong>в ${fmt(worst.spread)} раз</strong>. Балансировщик
+      считает их одинаковыми: вес задаётся на маршрут, а различие лежит
+      внутри него — настроить веса так, чтобы это учесть, нельзя.</p>` : `
+      <h2>Вывод</h2>
+      <p>Заметного разброса внутри маршрутов не обнаружено. Для такого
+      трафика обычной балансировки достаточно, и усложнение не оправдано.</p>`}
+  `;
+  $("report").classList.remove("hidden");
+  $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function handle(text) {
+  const requests = parseLog(text);
+  if (!requests.length) {
+    $("report").innerHTML = `<div class="note">В файле не нашлось обращений
+      со временем ответа. Нужен журнал, в котором записано время обработки:
+      в nginx это <code>$request_time</code> — его добавляют в
+      <code>log_format</code>.</div>`;
+    $("report").classList.remove("hidden");
+    return;
+  }
+  render(analyse(requests));
+}
+
+const read = (file) => file.text().then(handle);
+
+$("pick").onclick = () => $("file").click();
+$("file").onchange = (e) => e.target.files[0] && read(e.target.files[0]);
+$("demo").onclick = () => handle(DEMO_LOG);
+
+const drop = $("drop");
+drop.addEventListener("dragover", (e) => {
+  e.preventDefault(); drop.classList.add("over");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  const file = e.dataTransfer.files[0];
+  if (file) read(file);
+});
+</script>
+</body>
+</html>
