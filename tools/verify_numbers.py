@@ -149,6 +149,23 @@ def main() -> int:
         if legacy_abstract and "39–87" not in text:
             problems.append(f"{path.name}: исходная аннотация утрачена")
 
+    # README и заявка — такой же публичный текст, как статьи, и однажды
+    # они уже разошлись со статьями после исправления чисел.
+    # README и заявка — такой же публичный текст, как статьи, и однажды
+    # они уже разошлись со статьями после исправления чисел.
+    #
+    # PROJECT_STATE намеренно хранит историю проекта, включая отброшенные
+    # величины, поэтому в проверку не входит: там устаревшее число — не
+    # ошибка, а запись о том, что было исправлено.
+    for name in ("README.md", "ledentsov/ЗАЯВКА.md", "loadlens/README.md"):
+        path = BASE / name
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for b in ["658 мс", "123 мс", "65 раз", "99,7", "174 мкс", "39–87"]:
+            if b in text:
+                problems.append(f"{name}: встречается устаревшее «{b}»")
+
     for path in sorted(BASE.glob("docs/*.pptx")):
         if path.name.startswith("~$"):
             continue
