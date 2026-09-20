@@ -198,7 +198,8 @@ def main() -> int:
               "nginx/README.md", "thirdparty/RESULT.md",
               "thirdparty/AZURE.md", "ledentsov/ЗАЯВКА.md",
               "ledentsov/КОНКУРЕНТЫ.md", "ledentsov/ЭКОНОМИКА.md",
-              "ledentsov/ВОПРОСЫ_И_ОТВЕТЫ.md"]
+              "ledentsov/ВОПРОСЫ_И_ОТВЕТЫ.md",
+              "ledentsov/ПИТЧ_ТРЕНИНГ.md"]
     for name in public:
         path = BASE / name
         if not path.exists():
