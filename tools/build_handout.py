@@ -21,8 +21,8 @@ import qrcode
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "ledentsov" / "раздатка"
-URL = "https://winlast.github.io/adaptive-routing/"
-REPO = "https://github.com/winlast/adaptive-routing"
+URL = "https://winlast.github.io/loadlens/"
+REPO = "https://github.com/winlast/loadlens"
 
 
 def qr_png(data: str, path: Path, box: int = 10) -> None:
