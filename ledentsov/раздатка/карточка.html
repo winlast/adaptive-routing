@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>LoadLens — карточка</title>
+<style>
+@page { size: A6 landscape; margin: 0 }
+* { box-sizing: border-box }
+body { margin:0; font:13px/1.45 "Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:#16202b; background:#eef1f4 }
+.card { width:148mm; height:105mm; background:#fff; padding:9mm 10mm;
+  display:flex; flex-direction:column; margin:0 auto }
+@media print { body { background:#fff } .card { margin:0 } }
+h1 { font-size:17px; margin:0 0 1mm; letter-spacing:-.02em }
+.lead { font-size:12px; color:#41505f; margin:0 0 4mm }
+.lead b { color:#c62828 }
+.row { display:flex; gap:6mm; flex:1 }
+.nums { flex:1; display:flex; flex-direction:column; justify-content:center;
+  gap:3.5mm }
+.n { display:flex; align-items:baseline; gap:2.5mm }
+.n .v { font-size:21px; font-weight:700; letter-spacing:-.02em;
+  color:#1565c0; min-width:26mm }
+.n .t { font-size:11px; color:#41505f; line-height:1.3 }
+.qr { width:32mm; text-align:center; display:flex; flex-direction:column;
+  justify-content:center }
+.qr img { width:32mm; height:32mm; display:block }
+.qr span { font-size:9px; color:#5d6b7a; margin-top:1.5mm; display:block }
+footer { border-top:1px solid #dde4ea; margin-top:4mm; padding-top:2.5mm;
+  font-size:9.5px; color:#5d6b7a; display:flex; justify-content:space-between }
+</style></head><body>
+<div class="card">
+  <h1>Балансировщик не знает, сколько стоит запрос</h1>
+  <p class="lead">Один и тот же адрес <code>/orders</code>: от 1,7 мс до
+  123,1 мс — <b>разница в 72 раза</b>. Веса задаются на маршрут, а различие
+  лежит внутри маршрута. Настроить это невозможно в принципе.</p>
+  <div class="row">
+    <div class="nums">
+      <div class="n"><span class="v">+57 %</span><span class="t">нагрузки
+        при обещании p95 ≤ 100 мс<br>37,8 → 59,2 запросов в секунду</span></div>
+      <div class="n"><span class="v">656 640 ₽</span><span class="t">в год
+        на инфраструктуре<br>при 1000 запросов в секунду</span></div>
+      <div class="n"><span class="v">44,6 %</span><span class="t">обработчиков
+        в трассе Azure<br>расходятся не меньше чем в 10 раз</span></div>
+    </div>
+    <div class="qr">
+      <img src="qr-диагностика.png" alt="QR">
+      <span>Проверьте на своём журнале — он не покинет ваш компьютер</span>
+    </div>
+  </div>
+  <footer>
+    <span>Синявский С. Д., МГТУ им. Н. Э. Баумана</span>
+    <span>https://github.com/winlast/adaptive-routing</span>
+  </footer>
+</div>
+</body></html>
