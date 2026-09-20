@@ -11,6 +11,15 @@ NET=loadlens-thirdparty
 # Сетевые псевдонимы db и api заданы намеренно: так те же имена работают
 # и здесь, и в compose.yml, и файл nginx.conf остаётся общим.
 
+# Убрать за собой — отдельной командой: стенд держит память и порт,
+# и оставлять его работающим после проверки незачем.
+if [[ "${1:-}" == "stop" ]]; then
+  docker rm -f ll-db ll-api ll-proxy >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+  echo "Стенд PostgREST остановлен."
+  exit 0
+fi
+
 docker rm -f ll-db ll-api ll-proxy 2>/dev/null || true
 docker network rm "$NET" 2>/dev/null || true
 docker network create "$NET" >/dev/null
