@@ -33,3 +33,9 @@ data/benchmark_requests_log.csv
 # Временные файлы Word (документ открыт)
 ~$*
 data/demo_requests_log.csv
+
+# Внутренние материалы, не для публичного репозитория продукта.
+# Остаются на диске у автора, но в репозиторий не попадают.
+PROJECT_STATE.md
+ledentsov/
+tools/build_handout.py
