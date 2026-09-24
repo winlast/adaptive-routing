@@ -268,6 +268,14 @@ def main() -> int:
             if b in text:
                 problems.append(f"{path.name}: встречается устаревшее «{b}»")
 
+    # Страница называет число проверок — оно обязано совпасть с тем,
+    # сколько их на самом деле. Иначе счётчик в тексте тихо устареет,
+    # как это уже случилось однажды.
+    if f"{checked} утвержд" not in page:
+        problems.append(
+            f"страница: заявлено не {checked} утверждений — поправьте "
+            f"счётчик в loadlens/web/index.template.html")
+
     print(f"Сверено утверждений: {checked}")
     if problems:
         print(f"РАСХОЖДЕНИЙ: {len(problems)}")
