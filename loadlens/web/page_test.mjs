@@ -19,7 +19,8 @@ globalThis.document = {
   },
 };
 
-const code = m[1] + "\n;globalThis.__handle = handle;";
+const code = m[1] +
+  "\n;globalThis.__handle = handle;globalThis.__renderMoney = renderMoney;";
 writeFileSync("/tmp/page_module.mjs", code);
 await import("/tmp/page_module.mjs");
 
@@ -46,5 +47,19 @@ for (const probe of ["/api/search", "разброс внутри маршрут�
                      "ошибка оценки по маршруту", "Вывод"]) {
   console.log((out.includes(probe) ? "есть  " : "НЕТ   ") + probe);
 }
+// Денежный разбор: счёт клиента распределяется по маршрутам. Поле
+// пустое — блока быть не должно; заполнено — должны появиться рубли.
+if (stubs.get("money").innerHTML !== "") {
+  console.log("ДЕНЬГИ ПОКАЗАНЫ БЕЗ УКАЗАННОГО СЧЁТА"); process.exit(1);
+}
+stubs.get("bill").value = "150000";
+globalThis.__renderMoney();
+const money = stubs.get("money").innerHTML;
+if (!money.includes("\u20bd")) {
+  console.log("ДЕНЕЖНЫЙ БЛОК НЕ СОБРАН"); process.exit(1);
+}
+const plain = money.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+console.log("деньги по счёту 150 000:", plain.slice(0, 120).trim());
+
 console.log("\nвыдержка:\n" +
   out.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 420));

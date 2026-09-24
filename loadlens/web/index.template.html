@@ -45,6 +45,9 @@ th { color:var(--muted); font-weight:600; font-size:12px;
   text-transform:uppercase; letter-spacing:.04em }
 .big { color:var(--warn); font-weight:650 }
 .good { color:var(--ok); font-weight:650 }
+#bill { font:inherit; width:9em; padding:6px 8px; border:1px solid var(--line);
+        border-radius:6px; background:var(--bg); color:var(--ink) }
+#bill:focus { outline:2px solid var(--accent); outline-offset:1px }
 .note { background:var(--card); border-left:3px solid var(--accent);
   border-radius:0 9px 9px 0; padding:13px 15px; margin:20px 0;
   color:var(--muted); font-size:14px }
@@ -105,7 +108,39 @@ const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 0) =>
   Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "—";
 
+let lastAnalysis = null;
+
+function rub(v) { return Math.round(v).toLocaleString("ru"); }
+
+// Считается ровно одно: как счёт за серверы распределяется между
+// маршрутами. Основание — доля времени обработки. Допущение названо на
+// странице: счёт растёт пропорционально времени обработки. Обещания
+// экономии здесь нет и быть не может — журнал показывает, куда деньги
+// уходят сейчас, а не сколько удастся сберечь.
+function renderMoney() {
+  const box = $("money");
+  const a = lastAnalysis;
+  if (!box || !a) return;
+  const bill = parseFloat(($("bill") || {}).value);
+  if (!isFinite(bill) || bill <= 0) { box.innerHTML = ""; return; }
+  const rows = a.routes.slice(0, 10).map((r) => `
+    <tr><td>${r.route}</td><td>${fmt(r.shareOfTime, 1)} %</td>
+    <td><strong>${rub(bill * r.shareOfTime / 100)} \u20bd</strong></td></tr>`
+  ).join("");
+  box.innerHTML = `
+    <div class="scroll"><table>
+      <tr><th>маршрут</th><th>доля времени</th><th>\u20bd в месяц</th></tr>
+      ${rows}
+    </table></div>
+    <div class="note">${fmt(a.heavyShareOfRequests)} % самых тяжёлых
+    обращений занимают ${fmt(a.heavyShareOfTime)} % времени — это
+    <strong>${rub(bill * a.heavyShareOfTime / 100)} \u20bd в месяц</strong>.
+    Балансировщик не отличает их от остальных. Это распределение
+    сегодняшних расходов, а не обещание экономии.</div>`;
+}
+
 function render(a) {
+  lastAnalysis = a;
   const worst = a.routes.find((r) => r.spread >= 3) || a.routes[0];
   const ratio = a.paramError > 0 && a.routeError > a.paramError
     ? a.routeError / a.paramError : null;
@@ -171,6 +206,13 @@ function render(a) {
     <p>${fmt(a.heavyShareOfRequests)} % самых тяжёлых обращений занимают
     <strong>${fmt(a.heavyShareOfTime)} %</strong> всего времени обработки.</p>
 
+    <h2>Во что это обходится</h2>
+    <p class="sub">Укажите, сколько вы платите за серверы этого сервиса —
+    счёт распределится по маршрутам пропорционально времени обработки.</p>
+    <p><input id="bill" type="number" min="0" step="1000" placeholder="150000">
+    &nbsp;₽ в месяц</p>
+    <div id="money"></div>
+
     ${ratio ? `<div class="note">Оценка по признакам запроса точнее оценки
       по маршруту <strong>в ${fmt(ratio, 1)} раза</strong>. Сравнение ведётся
       по наименее загруженным обращениям: ожидание в очереди по признакам
@@ -188,6 +230,9 @@ function render(a) {
       трафика обычной балансировки достаточно, и усложнение не оправдано.</p>`}
   `;
   $("report").classList.remove("hidden");
+  const bill = $("bill");
+  if (bill) bill.addEventListener("input", renderMoney);
+  renderMoney();
   $("report").scrollIntoView({ behavior: "smooth", block: "start" });
   prepareShare(a);
 }

@@ -640,6 +640,62 @@ def print_report(a: Analysis, top: int = 8) -> None:
     verdict(a)
 
 
+def _rub(value: float) -> str:
+    return f"{value:,.0f}".replace(",", "\u00a0")
+
+
+def money_report(a: Analysis, bill: float, top: int = 8) -> None:
+    """
+    Переводит доли времени в рубли по счёту, который назвал клиент.
+
+    Считается ровно одно: как счёт за серверы распределяется между
+    маршрутами. Основание — доля времени обработки, которую маршрут
+    занимает в журнале. Допущение здесь одно и названо в выводе: счёт
+    растёт пропорционально времени обработки. Для сервиса, который
+    масштабируют числом экземпляров под нагрузку, это верно.
+
+    Чего тут НЕТ и быть не может: обещания экономии. Сколько удастся
+    сэкономить, журнал не показывает — он показывает, куда деньги
+    уходят сейчас.
+    """
+    print("Во что это обходится")
+    print("-" * 78)
+    print(f"  Счёт за серверы этого сервиса: {_rub(bill):>20} \u20bd/мес")
+    print("  (назван вами; распределяется пропорционально времени обработки)")
+    print()
+    print(f"{'маршрут':<36}{'доля времени':>14}{'\u20bd/мес':>14}")
+    for r in a.routes[:top]:
+        print(f"{r.route:<36}{r.share_of_time:>13.1f}%"
+              f"{_rub(bill * r.share_of_time / 100):>14}")
+    print()
+    heavy = bill * a.heavy_share_of_time / 100
+    print(f"  {a.heavy_share_of_requests:.0f} % самых тяжёлых обращений "
+          f"занимают {a.heavy_share_of_time:.0f} % времени —")
+    print(f"  это {_rub(heavy)} \u20bd/мес. Балансировщик не отличает их "
+          f"от остальных.")
+    print()
+
+
+def money_html(a: Analysis, bill: float) -> str:
+    rows = "".join(
+        f"<tr><td>{r.route}</td><td>{r.share_of_time:.1f}%</td>"
+        f"<td><b>{_rub(bill * r.share_of_time / 100)}&nbsp;\u20bd</b></td></tr>"
+        for r in a.routes[:20])
+    heavy = bill * a.heavy_share_of_time / 100
+    return ("<h2>Во что это обходится</h2><p class=\"sub\">Счёт "
+            f"{_rub(bill)}&nbsp;\u20bd/мес назван вами и распределён "
+            "пропорционально времени обработки. Это распределение "
+            "сегодняшних расходов, а не обещание экономии.</p>"
+            "<table><thead><tr><th>Маршрут</th><th>Доля времени</th>"
+            "<th>В месяц</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+            f"<div class=\"note\">{a.heavy_share_of_requests:.0f}&nbsp;% "
+            f"самых тяжёлых обращений занимают "
+            f"{a.heavy_share_of_time:.0f}&nbsp;% времени — это "
+            f"<b>{_rub(heavy)}&nbsp;\u20bd/мес</b>. Балансировщик не "
+            "отличает их от остальных.</div>")
+
+
 def verdict(a: Analysis) -> None:
     worst = max((r for r in a.routes if r.count >= 20),
                 key=lambda r: r.spread, default=None)
@@ -730,11 +786,13 @@ footer {{ margin-top:40px; padding-top:16px; border-top:1px solid var(--line);
 <th>p50, мс</th><th>p99, мс</th><th>Разброс</th></tr></thead>
 <tbody>{rows}</tbody></table>
 {explained_block}
+{money_block}
 <footer>{footer}</footer>
 </div></body></html>"""
 
 
-def write_html(a: Analysis, path: Path) -> None:
+def write_html(a: Analysis, path: Path,
+               bill: float | None = None) -> None:
     rows = "".join(
         f"<tr><td>{r.route}</td><td>{r.count}</td>"
         f"<td>{r.share_of_time:.1f}%</td><td>{r.p50:.0f}</td>"
@@ -790,6 +848,7 @@ def write_html(a: Analysis, path: Path) -> None:
         heavy_time=f"{a.heavy_share_of_time:.0f}",
         heavy_req=f"{a.heavy_share_of_requests:.0f}",
         verdict=v, rows=rows, explained_block=explained_block,
+        money_block=money_html(a, bill) if bill else "",
         footer="Отчёт построен по журналу обращений. Ошибка оценки — "
                "медианная относительная." + blocked,
     ), encoding="utf-8")
@@ -802,6 +861,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--html", type=Path, help="сохранить отчёт в HTML")
     ap.add_argument("--top", type=int, default=8,
                     help="сколько маршрутов показать")
+    ap.add_argument("--bill", "--счёт", type=float, metavar="РУБЛЕЙ",
+                    dest="bill",
+                    help="счёт за серверы этого сервиса, рублей в месяц: "
+                         "тогда отчёт покажет, во что обходится каждый "
+                         "маршрут")
     args = ap.parse_args(argv)
 
     if not args.log.exists():
@@ -818,8 +882,15 @@ def main(argv: list[str] | None = None) -> int:
 
     analysis = analyse(requests)
     print_report(analysis, top=args.top)
+    if args.bill:
+        money_report(analysis, args.bill, top=args.top)
+    else:
+        print("  Чтобы увидеть то же самое в рублях, укажите счёт за "
+              "серверы:")
+        print("  --bill 150000   (рублей в месяц)")
+        print()
     if args.html:
-        write_html(analysis, args.html)
+        write_html(analysis, args.html, bill=args.bill)
         print(f"Отчёт сохранён: {args.html}")
     return 0
 
