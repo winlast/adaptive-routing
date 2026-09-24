@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LoadLens — что скрыто от балансировщика</title>
+<meta name="description" content="Находит в обычном журнале обращений, какие запросы обходятся вам дороже всего. Ничего не устанавливается, код не меняется, журнал никуда не отправляется.">
+<title>LoadLens — во что вам обходится каждый запрос к API</title>
 <style>
 :root {
   --ink:#16202b; --muted:#5d6b7a; --line:#dde4ea; --accent:#1565c0;
@@ -45,6 +46,9 @@ th { color:var(--muted); font-weight:600; font-size:12px;
   text-transform:uppercase; letter-spacing:.04em }
 .big { color:var(--warn); font-weight:650 }
 .good { color:var(--ok); font-weight:650 }
+#bill { font:inherit; width:9em; padding:6px 8px; border:1px solid var(--line);
+        border-radius:6px; background:var(--bg); color:var(--ink) }
+#bill:focus { outline:2px solid var(--accent); outline-offset:1px }
 .note { background:var(--card); border-left:3px solid var(--accent);
   border-radius:0 9px 9px 0; padding:13px 15px; margin:20px 0;
   color:var(--muted); font-size:14px }
@@ -55,13 +59,98 @@ pre { background:var(--card); border:1px solid var(--line); border-radius:10px;
 footer { margin-top:44px; padding-top:16px; border-top:1px solid var(--line);
   color:var(--muted); font-size:13px }
 a { color:var(--accent) }
+
+/* --- посадочная страница --- */
+.brand { font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  font-size:13px; color:var(--accent); margin:0 0 14px }
+.hero { padding:18px 0 8px }
+.hero h1 { font-size:34px; line-height:1.22; margin:0 0 14px; max-width:19em }
+.lead { font-size:17.5px; color:var(--muted); margin:0 0 22px; max-width:40em }
+.cta-row { margin:0 0 10px }
+.cta-row a { text-decoration:none }
+.hero-note { font-size:13.5px; color:var(--muted); margin:10px 0 0 }
+section { padding-top:42px }
+section > h2 { font-size:23px; margin:0 0 12px; letter-spacing:-.01em }
+section > p { max-width:40em }
+.kicker { text-transform:uppercase; letter-spacing:.1em; font-size:12px;
+  font-weight:650; color:var(--accent); margin:0 0 7px }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:16px; margin:18px 0 }
+.box { background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:17px 19px }
+.box h3 { margin:0 0 7px; font-size:16px }
+.box p { margin:0; color:var(--muted); font-size:14.5px }
+ul.plain { padding-left:20px; max-width:40em }
+ul.plain li { margin:0 0 9px }
+.limits li { color:var(--muted) }
+.limits strong { color:var(--ink) }
+.contact { display:flex; flex-wrap:wrap; gap:10px 26px; margin:16px 0 0;
+  font-size:15px }
+.contact a { text-decoration:none; font-weight:600 }
+@media (max-width:640px) { .hero h1 { font-size:26px } .lead { font-size:16px } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Что скрыто от балансировщика</h1>
-  <p class="sub">Читает обычный журнал обращений и показывает, насколько
-  стоимость запросов различается внутри одного маршрута.</p>
+  <header class="hero">
+    <div class="brand">LoadLens</div>
+    <h1>Узнайте, во что вам обходится каждый запрос к вашему API</h1>
+    <p class="lead">Инфраструктура считает запросы штуками. Но один и тот
+    же адрес стоит по-разному в десятки раз — и за этот разброс вы платите
+    серверами. LoadLens находит его в обычном журнале обращений: ничего не
+    устанавливая, не меняя код и не отдавая никому свои данные.</p>
+    <p class="cta-row">
+      <a href="#try"><button class="primary">Проверить свой журнал</button></a>
+    </p>
+    <p class="hero-note">Бесплатно, открытым кодом. Работает на любом
+    стеке — Node.js, Go, Java, PHP, Python: читается журнал, а не код.</p>
+  </header>
+
+  <section>
+    <p class="kicker">Проблема</p>
+    <h2>Стоимость запроса не определяется его адресом</h2>
+    <p>Пользователь нажимает «посмотреть баланс». Обычно это доли секунды,
+    иногда — три. Он ничего не сделал не так: в этот момент кто-то другой
+    заказал выписку за год, и его тяжёлый запрос занял обработчик целиком.</p>
+    <p>Вот <strong>чужая</strong> база данных — PostgreSQL с таблицей на
+    300&nbsp;000 строк за PostgREST. Нашего кода в ней нет ни строки:</p>
+    <div class="scroll"><table>
+      <tr><th>запрос — адрес один и тот же</th><th>медиана</th></tr>
+      <tr><td>/orders?id=eq.500</td><td>1,7 мс</td></tr>
+      <tr><td>/orders?limit=5</td><td>2,0 мс</td></tr>
+      <tr><td>/orders?limit=20000</td><td>49,1 мс</td></tr>
+      <tr><td>/orders?order=amount.desc&amp;limit=20000</td>
+          <td class="big">123,1 мс</td></tr>
+    </table></div>
+    <p>Разница в <strong>72 раза</strong> внутри одного адреса.
+    Балансировщик видит строку <code>/orders</code> и считает все четыре
+    обращения одинаковыми. Настройками это не лечится: вес задаётся на
+    маршрут, а различие лежит внутри маршрута.</p>
+  </section>
+
+  <section>
+    <p class="kicker">Насколько это массово</p>
+    <h2>Почти у половины обработчиков в настоящем облаке</h2>
+    <p>Microsoft опубликовала журнал своей платформы Azure Functions:
+    <strong>32&nbsp;968 обработчиков настоящих клиентов, 1,8 млрд
+    вызовов.</strong> Мы к этим данным не прикасались.</p>
+    <p>Для каждого обработчика сравнили обычный вызов с самым медленным
+    процентом его же вызовов — код тот же, адрес тот же.</p>
+    <div class="cards">
+      <div class="card"><div class="n big">44,6 %</div>
+        <div class="l">обработчиков расходятся не меньше чем в 10 раз</div></div>
+      <div class="card"><div class="n">11,7 %</div>
+        <div class="l">расходятся не меньше чем в 100 раз</div></div>
+      <div class="card"><div class="n">8×</div>
+        <div class="l">типичный разброс — не 72, и мы это говорим прямо</div></div>
+    </div>
+  </section>
+
+  <section id="try">
+    <p class="kicker">Проверьте сами</p>
+    <h2>Сейчас, на своём журнале, за минуту</h2>
+    <p>Ничего не устанавливается, регистрация не нужна, код менять не
+    надо. Нужен только журнал обращений, который ваш сервер уже пишет.</p>
 
   <div class="drop" id="drop">
     <p>Перетащите сюда журнал nginx — или посмотрите на готовом примере.</p>
@@ -88,11 +177,121 @@ a { color:var(--accent) }
     <a id="issue" href="#" target="_blank" rel="noopener">
       <button>Открыть форму на GitHub</button></a>
   </div>
+  </section>
+
+  <section>
+    <p class="kicker">Что дальше</p>
+    <h2>Увидеть — половина дела. Вторая половина — починить</h2>
+    <div class="grid2">
+      <div class="box">
+        <h3>1. Диагностика</h3>
+        <p>Читает журнал и показывает, где деньги. Ничего не ставится в
+        путь запроса, риск внедрения нулевой. Это то, что выше на этой
+        странице, — готово и бесплатно.</p>
+      </div>
+      <div class="box">
+        <h3>2. Маршрутизатор</h3>
+        <p>Оценивает стоимость запроса <strong>до</strong> обработки и не
+        пускает тяжёлые обращения туда, где они блокируют остальных.
+        Ставится в тот nginx, который у вас уже стоит.</p>
+      </div>
+    </div>
+    <p>Один и тот же nginx, тот же трафик, те же обработчики. Отличается
+    только способ выбора узла:</p>
+    <div class="scroll"><table>
+      <tr><th></th><th>обычная балансировка</th><th>LoadLens</th></tr>
+      <tr><td>быстрые запросы, медиана</td><td>103,9 мс</td>
+          <td class="good">11,3 мс</td></tr>
+      <tr><td>доля медленнее 200 мс</td><td class="big">36,9 %</td>
+          <td class="good">0,0 %</td></tr>
+      <tr><td>запросов в секунду при p95 ≤ 100 мс</td><td>37,8</td>
+          <td class="good">59,2</td></tr>
+    </table></div>
+    <p>Для сервиса на 1000 запросов в секунду это <strong>17 серверов
+    вместо 27</strong> — на 656&nbsp;640&nbsp;₽ в год меньше по публичному
+    прейскуранту Yandex&nbsp;Cloud.</p>
+  </section>
+
+  <section>
+    <p class="kicker">Сколько стоит</p>
+    <h2>Столько, чтобы вам оставалось больше</h2>
+    <p>Диагностика и маршрутизатор — <strong>открытый код, бесплатно</strong>.
+    Платным становится то, что нужно, когда от инструмента уже зависят:
+    обновление модели стоимости по свежему журналу, панель с объяснением
+    решений, оповещение о расхождении модели с реальностью, интеграции и
+    поддержка.</p>
+    <div class="note">Принцип, который мы готовы записать в договор:
+    <strong>цена не превышает трети той экономии, которую диагностика
+    показала на вашем собственном журнале.</strong> Показала мало —
+    значит, продавать нечего, и мы скажем это первыми.</div>
+    <p>Конкретных тарифов мы пока не называем: платящих клиентов у нас
+    нет, и цена, придуманная до первой сделки, была бы выдумкой. Первым,
+    кто возьмёт продукт в работу, он достаётся бесплатно — в обмен на
+    журнал и разрешение опубликовать обезличенный разбор.</p>
+  </section>
+
+  <section>
+    <p class="kicker">Почему этому можно верить</p>
+    <h2>Проверено на четырёх уровнях, и всё воспроизводится</h2>
+    <ul class="plain">
+      <li><strong>На чужом ПО.</strong> PostgREST и PostgreSQL — программы,
+      которые писали не мы. Инструмент, ничего не зная об устройстве
+      сервиса, сам определил из одних времён ответа, что дороже всего
+      обходится сортировка.</li>
+      <li><strong>На данных Microsoft.</strong> 1,8 млрд вызовов настоящих
+      клиентов Azure — проблема массовая, а не лабораторная.</li>
+      <li><strong>В настоящем nginx.</strong> Числа выше сняты в той
+      форме, в какой продукт приходит к клиенту, а не в прототипе.</li>
+      <li><strong>Любым, кто откроет репозиторий.</strong> Четыре проверки,
+      каждая одной командой, десять минут. Ни одно число не попадает в
+      наши тексты, пока не лежит в файле с данными — это проверяется
+      автоматически, 64 утверждения.</li>
+    </ul>
+    <div class="note">Первая версия проекта показывала прирост в 39–87 %.
+    При проверке выяснилось, что вычисления в ней изображались пустым
+    циклом и эффект был завышен вдвое. Проект переделали с нуля, и честные
+    числа получились <strong>скромнее заявленных</strong>. Мы предпочитаем,
+    чтобы вы узнали это от нас.</div>
+  </section>
+
+  <section>
+    <p class="kicker">Границы</p>
+    <h2>Где это не работает</h2>
+    <p>Называем сами, потому что измерено.</p>
+    <ul class="plain limits">
+      <li><strong>Мягкое требование к отклику — пользы нет.</strong> Если
+      вам достаточно p95 в 200 мс, экономия ровно нулевая. Пакетной
+      обработке и выгрузкам мы не нужны.</li>
+      <li><strong>Общая пропускная способность падает на 21 %.</strong> Это
+      размен: тяжёлые обращения идут медленнее, зато лёгкие перестают за
+      ними стоять.</li>
+      <li><strong>На однородном потоке маршрутизация вредна</strong>, а не
+      просто бесполезна.</li>
+      <li><strong>Боевого трафика настоящей компании мы не видели.</strong>
+      Это наш главный пробел, и поэтому первый шаг — бесплатная
+      диагностика, которая ничего не меняет в вашей системе.</li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="kicker">Связаться</p>
+    <h2>Покажите нам свой журнал</h2>
+    <p>Если разброс у вас нашёлся — расскажите, разберём вместе. Если не
+    нашёлся — расскажите тем более: отрицательный ответ для нас так же
+    ценен, и мы напишем о нём прямо.</p>
+    <p class="contact">
+      <a href="mailto:ssd-tula@mail.ru">ssd-tula@mail.ru</a>
+      <a href="https://t.me/winlast" target="_blank" rel="noopener">Telegram
+      @winlast</a>
+      <a href="https://github.com/winlast/loadlens" target="_blank"
+         rel="noopener">github.com/winlast/loadlens</a>
+    </p>
+  </section>
 
   <footer>
     LoadLens — диагностика скрытой от балансировщика стоимости запросов.
     Тот же разбор доступен как программа командной строки; числа
-    совпадают, это проверяется автоматически.
+    совпадают, это проверяется автоматически. Открытый код, лицензия MIT.
   </footer>
 </div>
 
@@ -1632,7 +1831,39 @@ const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 0) =>
   Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "—";
 
+let lastAnalysis = null;
+
+function rub(v) { return Math.round(v).toLocaleString("ru"); }
+
+// Считается ровно одно: как счёт за серверы распределяется между
+// маршрутами. Основание — доля времени обработки. Допущение названо на
+// странице: счёт растёт пропорционально времени обработки. Обещания
+// экономии здесь нет и быть не может — журнал показывает, куда деньги
+// уходят сейчас, а не сколько удастся сберечь.
+function renderMoney() {
+  const box = $("money");
+  const a = lastAnalysis;
+  if (!box || !a) return;
+  const bill = parseFloat(($("bill") || {}).value);
+  if (!isFinite(bill) || bill <= 0) { box.innerHTML = ""; return; }
+  const rows = a.routes.slice(0, 10).map((r) => `
+    <tr><td>${r.route}</td><td>${fmt(r.shareOfTime, 1)} %</td>
+    <td><strong>${rub(bill * r.shareOfTime / 100)} \u20bd</strong></td></tr>`
+  ).join("");
+  box.innerHTML = `
+    <div class="scroll"><table>
+      <tr><th>маршрут</th><th>доля времени</th><th>\u20bd в месяц</th></tr>
+      ${rows}
+    </table></div>
+    <div class="note">${fmt(a.heavyShareOfRequests)} % самых тяжёлых
+    обращений занимают ${fmt(a.heavyShareOfTime)} % времени — это
+    <strong>${rub(bill * a.heavyShareOfTime / 100)} \u20bd в месяц</strong>.
+    Балансировщик не отличает их от остальных. Это распределение
+    сегодняшних расходов, а не обещание экономии.</div>`;
+}
+
 function render(a) {
+  lastAnalysis = a;
   const worst = a.routes.find((r) => r.spread >= 3) || a.routes[0];
   const ratio = a.paramError > 0 && a.routeError > a.paramError
     ? a.routeError / a.paramError : null;
@@ -1698,6 +1929,13 @@ function render(a) {
     <p>${fmt(a.heavyShareOfRequests)} % самых тяжёлых обращений занимают
     <strong>${fmt(a.heavyShareOfTime)} %</strong> всего времени обработки.</p>
 
+    <h2>Во что это обходится</h2>
+    <p class="sub">Укажите, сколько вы платите за серверы этого сервиса —
+    счёт распределится по маршрутам пропорционально времени обработки.</p>
+    <p><input id="bill" type="number" min="0" step="1000" placeholder="150000">
+    &nbsp;₽ в месяц</p>
+    <div id="money"></div>
+
     ${ratio ? `<div class="note">Оценка по признакам запроса точнее оценки
       по маршруту <strong>в ${fmt(ratio, 1)} раза</strong>. Сравнение ведётся
       по наименее загруженным обращениям: ожидание в очереди по признакам
@@ -1715,6 +1953,9 @@ function render(a) {
       трафика обычной балансировки достаточно, и усложнение не оправдано.</p>`}
   `;
   $("report").classList.remove("hidden");
+  const bill = $("bill");
+  if (bill) bill.addEventListener("input", renderMoney);
+  renderMoney();
   $("report").scrollIntoView({ behavior: "smooth", block: "start" });
   prepareShare(a);
 }
