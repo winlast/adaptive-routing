@@ -63,4 +63,7 @@ print(f"{sys.argv[1]}: числа совпадают")
 PY
 done
 
+echo "Форматы журналов:"
+node_run loadlens/web/formats_test.mjs
+
 node_run loadlens/web/page_test.mjs

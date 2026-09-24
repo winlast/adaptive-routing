@@ -82,8 +82,15 @@ section > p { max-width:40em }
 .box p { margin:0; color:var(--muted); font-size:14.5px }
 ul.plain { padding-left:20px; max-width:40em }
 ul.plain li { margin:0 0 9px }
-.limits li { color:var(--muted) }
-.limits strong { color:var(--ink) }
+details.limits { margin:18px 0 0; border:1px solid var(--line);
+  border-radius:11px; background:var(--card); padding:2px 18px }
+details.limits summary { cursor:pointer; padding:13px 0; font-weight:600;
+  font-size:15px; color:var(--muted) }
+details.limits summary:hover { color:var(--ink) }
+details.limits[open] summary { color:var(--ink) }
+details.limits ul { margin:4px 0 16px }
+details.limits li { color:var(--muted); font-size:14.5px }
+details.limits strong { color:var(--ink) }
 .contact { display:flex; flex-wrap:wrap; gap:10px 26px; margin:16px 0 0;
   font-size:15px }
 .contact a { text-decoration:none; font-weight:600 }
@@ -150,10 +157,13 @@ ul.plain li { margin:0 0 9px }
     <p class="kicker">Проверьте сами</p>
     <h2>Сейчас, на своём журнале, за минуту</h2>
     <p>Ничего не устанавливается, регистрация не нужна, код менять не
-    надо. Нужен только журнал обращений, который ваш сервер уже пишет.</p>
+    надо. Нужен только журнал обращений, который ваш сервер уже пишет.
+    Понимаются <strong>nginx, Apache, Caddy, Cloudflare</strong>, JSON и
+    CSV — если формат ваш не подошёл, напишите, добавим.</p>
 
   <div class="drop" id="drop">
-    <p>Перетащите сюда журнал nginx — или посмотрите на готовом примере.</p>
+    <p>Перетащите сюда журнал обращений — или посмотрите на готовом
+    примере.</p>
     <button class="primary" id="pick">Выбрать файл</button>
     <button id="demo">Показать на примере</button>
     <input type="file" id="file" class="hidden" accept=".log,.txt,.json,.csv">
@@ -252,25 +262,29 @@ ul.plain li { margin:0 0 9px }
     циклом и эффект был завышен вдвое. Проект переделали с нуля, и честные
     числа получились <strong>скромнее заявленных</strong>. Мы предпочитаем,
     чтобы вы узнали это от нас.</div>
-  </section>
-
-  <section>
-    <p class="kicker">Границы</p>
-    <h2>Где это не работает</h2>
-    <p>Называем сами, потому что измерено.</p>
-    <ul class="plain limits">
-      <li><strong>Мягкое требование к отклику — пользы нет.</strong> Если
-      вам достаточно p95 в 200 мс, экономия ровно нулевая. Пакетной
-      обработке и выгрузкам мы не нужны.</li>
-      <li><strong>Общая пропускная способность падает на 21 %.</strong> Это
-      размен: тяжёлые обращения идут медленнее, зато лёгкие перестают за
-      ними стоять.</li>
-      <li><strong>На однородном потоке маршрутизация вредна</strong>, а не
-      просто бесполезна.</li>
-      <li><strong>Боевого трафика настоящей компании мы не видели.</strong>
-      Это наш главный пробел, и поэтому первый шаг — бесплатная
-      диагностика, которая ничего не меняет в вашей системе.</li>
-    </ul>
+    <details class="limits">
+      <summary>Так же прямо — о том, кому мы не подойдём</summary>
+      <ul class="plain">
+        <li><strong>Мягкое требование к отклику.</strong> Если вам
+        достаточно p95 в 200 мс, экономии не будет: по нашему же расчёту
+        она нулевая. Пакетной обработке и выгрузкам продукт не нужен, и
+        мы не станем его туда продавать.</li>
+        <li><strong>Размен, а не чистый выигрыш.</strong> Общая
+        пропускная способность снижается примерно на пятую часть:
+        тяжёлые обращения идут медленнее, зато лёгкие перестают за ними
+        стоять. Если важна только пропускная способность — это не к
+        нам.</li>
+        <li><strong>Однородная нагрузка.</strong> Если все запросы
+        стоят примерно одинаково, маршрутизация не просто бесполезна —
+        она проигрывает обычной схеме. Диагностика покажет это
+        бесплатно и за минуту.</li>
+        <li><strong>Боевых журналов настоящей компании мы пока не
+        видели.</strong> Это наш главный пробел — и ровно поэтому
+        диагностика бесплатна и ничего не меняет в вашей системе.
+        Первым, кто покажет нам свой журнал, продукт достаётся
+        даром.</li>
+      </ul>
+    </details>
   </section>
 
   <section>
@@ -466,14 +480,44 @@ function prepareShare(a) {
   $("share").classList.remove("hidden");
 }
 
+// Отказ без объяснения — самая дорогая ошибка продукта: человек
+// пробует один раз, ничего не получает и не возвращается. Поэтому у
+// каждого случая свой ответ, а у самого частого — готовая строка
+// конфигурации, которую остаётся скопировать.
+const FAILURES = {
+  "no-time": `<h2>Почти получилось</h2>
+    <p>Обращения в журнале есть, а времени ответа нет — без него измерять
+    нечего. Это обычное дело: <strong>стандартный nginx время ответа не
+    записывает</strong>, его нужно включить одной строкой.</p>
+    <pre>log_format timed '$remote_addr - $remote_user [$time_local] '
+                 '"$request" $status $body_bytes_sent '
+                 '"$http_referer" "$http_user_agent" $request_time';
+access_log /var/log/nginx/access.log timed;</pre>
+    <p>Для Apache то же самое даёт <code>%D</code> в конце
+    <code>LogFormat</code>. Перезапустите сервер, дайте журналу
+    накопиться за сутки — и возвращайтесь.</p>
+    <div class="note">Не хотите ждать — посмотрите, что инструмент
+    показывает, на готовом примере: кнопка «Показать на примере» выше.</div>`,
+  json: `<h2>Не нашлось нужных полей</h2>
+    <p>Это JSON, но в нём нет ни адреса запроса, ни времени ответа.
+    Нужны поля вроде <code>uri</code> или <code>path</code> и
+    <code>duration</code> или <code>request_time</code>.</p>
+    <div class="note">Если поля называются иначе — напишите нам, добавим:
+    <a href="mailto:ssd-tula@mail.ru">ssd-tula@mail.ru</a>.</div>`,
+  unknown: `<h2>Формат не распознан</h2>
+    <p>Понимаются: combined-формат nginx и Apache со временем ответа,
+    JSON-строки (Caddy, Cloudflare), CSV с заголовком.</p>
+    <div class="note">Пришлите несколько строк своего журнала — разберём
+    и добавим поддержку: <a href="mailto:ssd-tula@mail.ru">ssd-tula@mail.ru</a>.
+    Каждый новый формат делает инструмент полезнее для всех.</div>`,
+};
+
 function handle(text) {
   const requests = parseLog(text);
   if (!requests.length) {
-    $("report").innerHTML = `<div class="note">В файле не нашлось обращений
-      со временем ответа. Нужен журнал, в котором записано время обработки:
-      в nginx это <code>$request_time</code> — его добавляют в
-      <code>log_format</code>.</div>`;
+    $("report").innerHTML = FAILURES[diagnoseLog(text)] || FAILURES.unknown;
     $("report").classList.remove("hidden");
+    $("report").scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
   render(analyse(requests));

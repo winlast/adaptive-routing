@@ -11,7 +11,68 @@
 
 const ID_SEGMENT = /^(\d+|[0-9a-f]{8,}|[0-9a-f-]{32,})$/i;
 
-const NGINX = /"([A-Z]+)\s+(\S+)\s+HTTP\/[\d.]+"[\s\S]*?(\d+\.\d{3})\s*$/;
+// Строка запроса в текстовом журнале: опознаёт и nginx, и Apache.
+const REQUEST = /"([A-Z]+)\s+(\S+)\s+HTTP\/[\d.]+"/;
+// Время ответа, названное явно: rt=0.123, request_time=0.123.
+const LABELLED =
+  /\b(rt|request_time|upstream_response_time|duration|latency|response_time|took|elapsed)\s*[=:]\s*"?(\d+(?:\.\d+)?)/i;
+const NUMBER = /(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/;
+
+const DURATION_KEYS = [
+  "duration_ms", "latency_ms", "response_time_ms", "took_ms",
+  "edgetimetofirstbytems", "time_taken_ms", "target_processing_time",
+  "duration", "latency", "request_time", "upstream_response_time",
+  "response_time", "elapsed", "responsetime", "time_taken",
+];
+const PATH_KEYS = [
+  "path", "url", "uri", "request_uri", "endpoint", "route",
+  "clientrequesturi", "clientrequestpath", "http.url", "request",
+  "cs-uri-stem",
+];
+
+// Имя поля решает, в чём записана длительность.
+function asMs(value, key) {
+  const k = String(key).toLowerCase();
+  if (k.includes("micro") || k.endsWith("_us") || k.endsWith("usec")) {
+    return value / 1000;
+  }
+  if (k.endsWith("ms") || k.includes("millis")) return value;
+  return value * 1000;
+}
+
+// Caddy пишет адрес как {"request":{"uri":"/x"}}. Без разворота поле
+// request оказывается объектом, и адрес читается неправильно.
+function flatten(obj, prefix = "") {
+  const flat = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const name = (prefix + key).toLowerCase();
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      Object.assign(flat, flatten(value, name + "."));
+    } else {
+      if (!(name in flat)) flat[name] = value;
+      const short = name.split(".").pop();
+      if (!(short in flat)) flat[short] = value;
+    }
+  }
+  return flat;
+}
+
+// Время ответа из текстовой строки. Сначала явно названное поле; иначе
+// первое число после последнего поля в кавычках — в combined-формате
+// код и размер стоят раньше, поэтому лишнее число это время. Число с
+// точкой — секунды, целое — микросекунды (Apache %D). Берётся первое:
+// за $request_time часто идёт $upstream_response_time, а это другое.
+function durationFromLine(line, after) {
+  const lab = LABELLED.exec(line);
+  if (lab) return asMs(Number(lab[2]), lab[1]);
+  let tail = line.slice(after);
+  const quote = tail.lastIndexOf('"');
+  if (quote !== -1) tail = tail.slice(quote + 1);
+  const num = NUMBER.exec(tail);
+  if (!num) return null;
+  const value = Number(num[1]);
+  return num[1].includes(".") ? value * 1000 : value / 1000;
+}
 
 export function normalizePath(raw) {
   // Относительный адрес — базовый узел не важен, нужны путь и параметры.
@@ -51,28 +112,51 @@ export function parseLog(text) {
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let url = null;
-    let seconds = null;
+    let ms = null;
 
-    const m = NGINX.exec(line);
-    if (m) {
-      url = m[2];
-      seconds = Number(m[3]);
-    } else if (line.trimStart().startsWith("{")) {
+    if (line.trimStart().startsWith("{")) {
       try {
-        const obj = JSON.parse(line);
-        url = obj.request_uri ?? obj.uri ?? obj.path ?? obj.url ?? null;
-        const t =
-          obj.request_time ?? obj.duration ?? obj.latency ?? obj.elapsed;
-        if (t !== undefined) seconds = Number(t);
+        const flat = flatten(JSON.parse(line));
+        for (const k of PATH_KEYS) {
+          if (typeof flat[k] === "string" && flat[k]) { url = flat[k]; break; }
+        }
+        for (const k of DURATION_KEYS) {
+          const v = flat[k];
+          if (v !== undefined && v !== null && v !== "" &&
+              Number.isFinite(Number(v))) {
+            ms = asMs(Number(v), k);
+            break;
+          }
+        }
       } catch {
         continue;
       }
+    } else {
+      const m = REQUEST.exec(line);
+      if (m) {
+        url = m[2];
+        ms = durationFromLine(line, m.index + m[0].length);
+      }
     }
-    if (!url || seconds === null || !Number.isFinite(seconds)) continue;
+
+    if (!url || ms === null || !Number.isFinite(ms)) continue;
     const { route, params } = normalizePath(url);
-    requests.push({ path: route, params, durationMs: seconds * 1000 });
+    requests.push({ path: route, params, durationMs: ms });
   }
   return requests;
+}
+
+// Объясняет, почему журнал не разобрался. Молчаливый отказ — самая
+// дорогая ошибка: человек пробует один раз и не возвращается.
+export function diagnoseLog(text) {
+  const sample = text.split("\n").slice(0, 400).filter((l) => l.trim());
+  if (!sample.length) return "Файл пуст.";
+  const withRequest = sample.filter((l) => REQUEST.test(l)).length;
+  if (withRequest >= Math.max(1, Math.floor(sample.length / 10))) {
+    return "no-time";
+  }
+  if (sample[0].trimStart().startsWith("{")) return "json";
+  return "unknown";
 }
 
 export function percentile(values, p) {

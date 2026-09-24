@@ -94,30 +94,103 @@ def normalize_path(raw: str) -> tuple[str, dict[str, float]]:
     return route, params
 
 
-_NGINX = re.compile(
-    r'"(?P<method>[A-Z]+)\s+(?P<url>\S+)\s+HTTP/[\d.]+"'
-    r'.*?(?P<rt>\d+\.\d{3})\s*$'
-)
+# Строка запроса в текстовом журнале: "GET /путь HTTP/1.1". По ней
+# опознаётся и combined-формат nginx, и общий формат Apache.
+_REQUEST = re.compile(r'"(?P<method>[A-Z]+)\s+(?P<url>\S+)\s+HTTP/[\d.]+"')
+
+# Время ответа, названное явно: rt=0.123, request_time=0.123, duration=12ms.
+_LABELLED = re.compile(
+    r'\b(?P<key>rt|request_time|upstream_response_time|duration|latency|'
+    r'response_time|took|elapsed)\s*[=:]\s*"?(?P<val>\d+(?:\.\d+)?)',
+    re.I)
+
+# Числовой хвост строки после последнего поля в кавычках.
+_NUMBER = re.compile(r'(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])')
 
 _DURATION_KEYS = ("duration_ms", "latency_ms", "response_time_ms", "took_ms",
+                  "edgetimetofirstbytems", "time_taken_ms", "target_processing_time",
                   "duration", "latency", "request_time", "upstream_response_time",
-                  "response_time", "elapsed")
-_PATH_KEYS = ("path", "url", "uri", "request", "request_uri", "endpoint",
-              "route")
+                  "response_time", "elapsed", "responsetime", "time_taken",
+                  "request.duration", "response.duration")
+_PATH_KEYS = ("path", "url", "uri", "request_uri", "endpoint", "route",
+              "clientrequesturi", "clientrequestpath", "request.uri",
+              "request.path", "http.url", "request", "cs-uri-stem")
 _TIME_KEYS = ("timestamp", "time", "ts", "start", "started_at", "@timestamp")
 
 
 def _as_ms(value: float, key: str) -> float:
     """Приводит длительность к миллисекундам по имени поля."""
-    if key.endswith("_ms") or key.endswith("ms"):
+    key = key.lower()
+    if "micro" in key or key.endswith("_us") or key.endswith("usec"):
+        return float(value) / 1000.0
+    if key.endswith("ms") or "millis" in key:
         return float(value)
     # Поля вроде request_time у nginx измеряются в секундах.
     return float(value) * 1000.0
 
 
+def _flatten(row: dict, prefix: str = "") -> dict:
+    """
+    Разворачивает вложенный JSON в плоский вид.
+
+    Caddy пишет адрес как {"request": {"uri": "/x"}}, и без разворота
+    поле `request` оказывается словарём. Раньше такой журнал разбирался
+    молча и неправильно: в качестве адреса брался текст самого словаря,
+    а из него вычитывались несуществующие параметры. Тихая порча хуже
+    отказа, поэтому ключи раскладываются и по полному пути
+    («request.uri»), и по короткому имени («uri»).
+    """
+    flat: dict = {}
+    for key, value in row.items():
+        name = f"{prefix}{key}".lower()
+        if isinstance(value, dict):
+            flat.update(_flatten(value, f"{name}."))
+        else:
+            flat.setdefault(name, value)
+            short = name.rsplit(".", 1)[-1]
+            flat.setdefault(short, value)
+    return flat
+
+
+def _duration_from_line(line: str, after: int) -> float | None:
+    """
+    Достаёт время ответа из текстовой строки журнала.
+
+    Порядок важен. Сначала ищется явно названное поле (`rt=0.123`) —
+    если оно есть, гадать не о чем. Иначе берётся числовой хвост после
+    последнего поля в кавычках: в combined-формате размер ответа и код
+    стоят раньше, поэтому лишнее число после строки агента — это время,
+    а не байты. Число с точкой считается секундами (nginx
+    $request_time, Apache %T), целое — микросекундами (Apache %D).
+
+    Берётся **первое** число хвоста: у nginx за $request_time часто
+    следует $upstream_response_time, и это время работы сервера, а не
+    полное время запроса.
+    """
+    m = _LABELLED.search(line)
+    if m:
+        return _as_ms(float(m.group("val")), m.group("key"))
+
+    tail = line[after:]
+    quote = tail.rfind('"')
+    if quote != -1:
+        tail = tail[quote + 1:]
+    found = _NUMBER.search(tail)
+    if not found:
+        return None
+    raw = found.group(1)
+    value = float(raw)
+    if "." in raw:
+        return value * 1000.0
+    # Целое число секунд как время ответа бессмысленно по разрешению,
+    # а Apache %D пишет микросекунды — трактуем именно так.
+    return value / 1000.0
+
+
 def _from_mapping(row: dict) -> Request | None:
-    lower = {str(k).lower(): v for k, v in row.items()}
-    path = next((lower[k] for k in _PATH_KEYS if lower.get(k)), None)
+    lower = _flatten(row)
+    path = next((lower[k] for k in _PATH_KEYS
+                 if isinstance(lower.get(k), str) and lower[k]), None)
     dur_key = next((k for k in _DURATION_KEYS if lower.get(k) not in (None, "")),
                    None)
     if path is None or dur_key is None:
@@ -183,15 +256,59 @@ def read_log(path: Path) -> list[Request]:
         if requests:
             return requests
 
-    # combined-формат nginx с $request_time в конце строки
+    # Текстовые журналы: combined-формат nginx и общий формат Apache.
+    # Время ответа может стоять где угодно после строки запроса и быть
+    # записано в секундах, микросекундах или названным полем.
     for line in text:
-        m = _NGINX.search(line)
+        m = _REQUEST.search(line)
         if not m:
             continue
+        duration = _duration_from_line(line, m.end())
+        if duration is None:
+            continue
         route, params = normalize_path(m.group("url"))
-        requests.append(
-            Request(route, params, float(m.group("rt")) * 1000.0))
+        requests.append(Request(route, params, duration))
     return requests
+
+
+NGINX_LOG_FORMAT = '    log_format timed \'$remote_addr - $remote_user [$time_local] \'\n                     \'"$request" $status $body_bytes_sent \'\n                     \'"$http_referer" "$http_user_agent" $request_time\';\n    access_log /var/log/nginx/access.log timed;'
+
+
+def diagnose_log(path: Path) -> str:
+    """
+    Объясняет, почему журнал не разобрался, и что с этим делать.
+
+    Молчаливый отказ — самая дорогая ошибка продукта: человек пробует
+    один раз, ничего не получает и не возвращается. Поэтому случай
+    «строки запросов есть, а времени ответа нет» разбирается отдельно:
+    это самый частый случай, потому что стандартный nginx время ответа
+    не пишет вовсе, и исправляется он одной строкой в конфигурации.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    sample = [ln for ln in text[:400] if ln.strip()]
+    if not sample:
+        return "Файл пуст."
+
+    with_request = sum(1 for ln in sample if _REQUEST.search(ln))
+    if with_request >= max(1, len(sample) // 10):
+        return (
+            "В журнале есть обращения, но нет времени ответа — а без "
+            "него измерять нечего.\n"
+            "Стандартный nginx его не записывает: нужно добавить "
+            "$request_time в формат.\n\n"
+            + NGINX_LOG_FORMAT +
+            "\n\nДля Apache то же самое даёт %D в конце LogFormat.\n"
+            "Перезапустите сервер, дайте журналу накопиться и "
+            "вернитесь.")
+
+    if sample[0].lstrip().startswith("{"):
+        return ("Это JSON, но в нём не нашлось ни адреса запроса, ни "
+                "времени ответа.\nНужны поля вроде uri или path и "
+                "duration или request_time.")
+
+    return ("Формат не распознан. Поддерживаются: combined-формат "
+            "nginx и Apache\nсо временем ответа, JSON-строки (Caddy, "
+            "Cloudflare) и CSV.")
 
 
 # ---------------------------------------------------------------------------
@@ -874,10 +991,12 @@ def main(argv: list[str] | None = None) -> int:
 
     requests = read_log(args.log)
     if len(requests) < 20:
-        print("Не удалось разобрать журнал: распознано менее 20 обращений.",
-              file=sys.stderr)
-        print("Поддерживаются combined-формат nginx с $request_time, "
-              "JSON-строки и CSV.", file=sys.stderr)
+        if requests:
+            print(f"Разобрано всего {len(requests)} обращений — этого мало "
+                  f"для выводов.\nНужно хотя бы 20, а лучше несколько "
+                  f"тысяч.", file=sys.stderr)
+        else:
+            print(diagnose_log(args.log), file=sys.stderr)
         return 1
 
     analysis = analyse(requests)
